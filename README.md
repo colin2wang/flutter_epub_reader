@@ -1,175 +1,174 @@
-# EPUB阅读器 - Flutter 电子书阅读应用
+# EPUB Reader - Flutter E-book Reading Application
 
-一个功能完整的 EPUB 电子书阅读工具，支持代码块的正确显示、语法高亮和智能交互。
+A fully-featured EPUB e-book reading tool with proper code block display, syntax highlighting, and intelligent interactions.
 
-## 功能特性
+## Features
 
-### 核心功能
-- 打开和阅读 ePub 格式电子书
-- 章节导航和切换（支持多层级章节结构）
-- 支持代码块显示
-- 代码语法高亮（支持多种编程语言）
-- 响应式界面设计
-- 支持 Android、Windows 平台
+### Core Features
+- Open and read ePub format e-books
+- Chapter navigation and switching (supports multi-level chapter structure)
+- Code block display support
+- Code syntax highlighting (supports multiple programming languages)
+- Responsive interface design
+- Supports Android and Windows platforms
 
-### 交互功能
-- **全屏模式**：沉浸式阅读体验，隐藏状态栏和导航栏
-- **手势操作**：
-  - 点击屏幕左右边缘（各20%区域）快速翻页
-  - 水平滑动翻页（左滑下一页，右滑上一页）
-  - 点击屏幕中间区域显示/隐藏设置菜单
-- **字体调整**：支持12-32号字体大小调节
-- **夜间模式**：日间/夜间主题切换，保护视力
-- **搜索功能**：全文搜索，快速定位内容
-- **章节列表**：扁平化显示所有章节（包括子章节），支持层级缩进
-- **自动保存**：自动保存阅读进度和设置，下次打开自动恢复
+### Interactive Features
+- **Full-screen Mode**: Immersive reading experience with hidden status bar and navigation bar
+- **Gesture Controls**:
+  - Tap left/right screen edges (20% area each) for quick page turning
+  - Horizontal swipe to turn pages (swipe left for next, right for previous)
+  - Tap center of screen to show/hide settings menu
+- **Font Adjustment**: Support font size adjustment from 12 to 32
+- **Dark Mode**: Day/night theme switching to protect your eyes
+- **Search Function**: Full-text search for quick content location
+- **Chapter List**: Flat display of all chapters (including sub-chapters) with level indentation
+- **Bottom Navigation Bar**: Displays page numbers and navigation buttons, usable in full-screen mode
+- **Auto-save**: Automatically saves reading progress and settings, restores on next open
 
-## 依赖包
+## Dependencies
 
-本项目使用了以下主要依赖：
+This project uses the following main dependencies:
 
-- **epubx**: EPUB 文件解析
-- **file_picker**: 文件选择器
-- **flutter_widget_from_html**: HTML 内容渲染
-- **highlight**: 代码语法高亮
-- **html**: HTML 解析
-- **shared_preferences**: 本地数据存储（保存设置和阅读进度）
-- **flutter_launcher_icons**: APP 图标生成工具
+- **epubx**: EPUB file parsing
+- **file_picker**: File selector
+- **flutter_widget_from_html**: HTML content rendering
+- **highlight**: Code syntax highlighting
+- **html**: HTML parsing
+- **shared_preferences**: Local data storage (saves settings and reading progress)
+- **flutter_launcher_icons**: App icon generation tool
 
-## 使用方法
+## Usage
 
-1. **安装依赖**
+1. **Install Dependencies**
    ```bash
    flutter pub get
    ```
 
-2. **运行应用**
+2. **Run the Application**
    ```bash
    flutter run
    ```
 
-3. **打开 ePub 文件**
-   - 点击主界面的"选择 ePub 文件"按钮
-   - 从设备中选择要阅读的 .epub 文件
-   - 应用会自动加载并显示书籍内容
+3. **Open ePub Files**
+   - Click the "Select ePub File" button on the main interface
+   - Choose the .epub file you want to read from your device
+   - The app will automatically load and display the book content
 
-4. **阅读操作**
-   - **翻页方式**：
-     - 点击屏幕左边缘（20%区域）→ 上一章
-     - 点击屏幕右边缘（20%区域）→ 下一章
-     - 向左滑动 → 下一章
-     - 向右滑动 → 上一章
-     - 使用底部导航栏箭头按钮
-   - **设置菜单**：点击屏幕中间区域弹出居中菜单，包含：
-     - 字体大小调整（12-32号）
-     - 夜间模式切换
-     - 全文搜索
-     - 章节列表浏览
-     - 全屏模式开关
-   - **章节导航**：点击右上角列表图标或从菜单进入章节列表
-   - **退出全屏**：在全屏模式下按返回键先退出全屏
+4. **Reading Operations**
+   - **Page Turning Methods**:
+     - Tap left edge of screen (20% area) → Previous chapter
+     - Tap right edge of screen (20% area) → Next chapter
+     - Swipe left → Next chapter
+     - Swipe right → Previous chapter
+     - Use bottom navigation bar arrow buttons
+   - **Settings Menu**: Tap the center area of the screen to pop up a centered menu, including:
+     - Font size adjustment (12-32)
+     - Dark mode toggle
+     - Full-text search
+     - Chapter list browsing
+     - Full-screen mode toggle
+     - Bottom navigation bar visibility toggle (controls whether to show page numbers and navigation buttons)
+   - **Chapter Navigation**: Click the list icon in the top-right corner or access chapter list from the menu
+   - **Exit Full-screen**: Press the back button in full-screen mode to exit first
+   - **Bottom Navigation Bar**:
+     - Displays current chapter page number (e.g., 5 / 20)
+     - Provides quick buttons for previous/next chapter
+     - Usable in full-screen mode
+     - Can be shown/hidden via the "Bottom Navigation Bar" option in settings menu
 
-5. **持久化功能**
-   - 自动保存阅读进度（章节位置）
-   - 自动保存字体大小设置
-   - 自动保存夜间模式偏好
-   - 下次打开同一文件时自动恢复所有设置
-   - 不同文件的设置独立保存，互不干扰
+5. **Persistence Features**
+   - Automatically saves reading progress (chapter position)
+   - Automatically saves font size settings
+   - Automatically saves dark mode preference
+   - Automatically saves bottom navigation bar visibility setting
+   - Automatically restores all settings when opening the same file next time
+   - Settings for different files are saved independently without interference
 
-## 代码块支持
+## Code Block Support
 
-阅读器能够正确识别和显示 ePub 文件中的代码块，包括：
+The reader can properly identify and display code blocks in ePub files, including:
 
-- 自动检测代码语言（通过 `class="language-xxx"` 或 `class="lang-xxx"`）
-- 支持多种编程语言的语法高亮：
+- Automatic language detection (via `class="language-xxx"` or `class="lang-xxx"`)
+- Syntax highlighting for multiple programming languages:
   - Java, Python, JavaScript, C/C++
   - HTML, CSS, SQL
-  - 以及其他 highlight.js 支持的语言
-- 深色主题代码显示
-- 可选择的代码文本
+  - And other languages supported by highlight.js
+- Dark theme code display
+- Selectable code text
 
-## 项目结构
+## Project Structure
 
 ```
 lib/
-├── main.dart                 # 应用入口和主页
-├── epub_viewer.dart          # ePub 阅读器主组件
-└── code_block_widget.dart    # 代码块显示组件
+├── main.dart                 # Application entry point and home page
+├── epub_viewer.dart          # Main ePub reader component
+└── code_block_widget.dart    # Code block display component
 ```
 
-## 注意事项
+## Notes
 
-### Android 权限
+### Android Permissions
 
-在 Android 设备上使用时，需要在系统设置中授予存储权限以访问 ePub 文件。
+When using on Android devices, you need to grant storage permissions in system settings to access ePub files.
 
-### Windows 开发者模式
+### Windows Developer Mode
 
-在 Windows 上运行时，需要启用开发者模式以支持插件符号链接：
-1. 打开设置
-2. 进入"更新和安全" > "开发者选项"
-3. 启用"开发者模式"
+When running on Windows, you need to enable Developer Mode to support plugin symbolic links:
+1. Open Settings
+2. Go to "Update & Security" > "Developer options"
+3. Enable "Developer Mode"
 
-## 技术实现
+## Technical Implementation
 
-### 代码高亮实现
+### Code Highlighting Implementation
 
-代码块组件使用 `highlight` 包进行语法分析，并根据不同的语法元素应用相应的颜色：
+The code block component uses the `highlight` package for syntax analysis and applies appropriate colors based on different syntax elements:
 
-- 关键字：蓝色
-- 字符串：橙色
-- 注释：绿色
-- 数字：浅绿色
-- 函数名：黄色
-- 类名：青色
-- 变量名：浅蓝色
+- Keywords: Blue
+- Strings: Orange
+- Comments: Green
+- Numbers: Light green
+- Function names: Yellow
+- Class names: Cyan
+- Variable names: Light blue
 
-### HTML 渲染
+### HTML Rendering
 
-使用 `flutter_widget_from_html` 包渲染 EPUB 中的 HTML 内容，并通过自定义 widget 构建器处理代码块元素。
+Uses the `flutter_widget_from_html` package to render HTML content in EPUB files, and handles code block elements through custom widget builders.
 
-### 数据持久化
+### Data Persistence
 
-使用 `shared_preferences` 实现本地数据存储：
-- 基于文件名哈希值生成唯一存储键
-- 自动保存用户的阅读进度和个性化设置
-- 无需用户手动操作，完全自动化
+Uses `shared_preferences` for local data storage:
+- Generates unique storage keys based on file name hash values
+- Automatically saves user's reading progress and personalized settings
+- Fully automated without manual user operation
 
-### APP 配置
+### App Configuration
 
-#### 修改 APP 名称
-- **Android**: 编辑 `android/app/src/main/AndroidManifest.xml` 中的 `android:label`
-- **Windows**: 编辑 `windows/runner/Runner.rc` 中的 `FileDescription` 和 `ProductName`
+#### Modify App Name
+- **Android**: Edit `android:label` in `android/app/src/main/AndroidManifest.xml`
+- **Windows**: Edit `FileDescription` and `ProductName` in `windows/runner/Runner.rc`
 
-#### 修改 APP 图标
-项目已集成 `flutter_launcher_icons` 工具，可自动生成多平台图标：
+## Future Improvements
 
-1. 准备图标文件（PNG 格式，1024x1024）放入 `assets/icons/app_icon.png`
-2. 运行命令生成图标：
-   ```bash
-   dart run flutter_launcher_icons
-   ```
-3. 重新构建应用即可看到新图标
+- [ ] Support more file formats (PDF, MOBI, TXT, etc.)
+- [ ] Add annotation and highlighting features
+- [ ] Support tree-structured table of contents display (collapsible/expandable)
+- [ ] Add reading statistics (reading time, progress percentage, daily reading volume, etc.)
+- [ ] Cloud sync for reading progress and settings
+- [ ] Support custom themes and color schemes
+- [ ] Add text-to-speech (TTS) reading function
+- [ ] Support automatic landscape/portrait orientation adaptation
+- [ ] Add book cover display and management
+- [ ] Support multi-language interface switching
+- [ ] Export notes and annotations feature
+- [ ] Bookshelf management (favorites, categories, sorting)
+- [ ] Offline download and cache management
 
-详细配置说明请参考：[ICON_SETUP_GUIDE.md](ICON_SETUP_GUIDE.md)
-
-## 未来改进方向
-
-- [x] 添加书签功能
-- [x] 支持字体大小调整
-- [x] 支持夜间模式
-- [x] 添加搜索功能
-- [x] 记住阅读进度（已实现）
-- [ ] 支持更多文件格式（PDF, MOBI等）
-- [ ] 添加批注和高亮功能
-- [ ] 支持目录树形结构显示
-- [ ] 添加阅读统计（阅读时长、进度等）
-- [ ] 云端同步阅读进度
-
-## 许可证
+## License
 
 MIT License
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
