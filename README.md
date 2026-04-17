@@ -1,10 +1,11 @@
 # EPUB Reader - Flutter E-book Reading Application
 
-A fully-featured EPUB e-book reading tool with proper code block display, syntax highlighting, and intelligent interactions.
+A fully-featured EPUB e-book reading tool with bookshelf management, code block display, syntax highlighting, and intelligent interactions.
 
 ## Features
 
 ### Core Features
+- **Bookshelf Management**: Manage your e-book collection with cover display and metadata
 - Open and read ePub format e-books
 - Chapter navigation and switching (supports multi-level chapter structure)
 - Code block display support
@@ -25,6 +26,15 @@ A fully-featured EPUB e-book reading tool with proper code block display, syntax
 - **Bottom Navigation Bar**: Displays page numbers and navigation buttons, usable in full-screen mode
 - **Auto-save**: Automatically saves reading progress and settings, restores on next open
 
+### Bookshelf Features
+- **Add to Bookshelf**: Add books from file picker or directly from reader
+- **Cover Display**: Automatic extraction and display of book covers from EPUB files
+- **Book Details Page**: View detailed information including title, author, reading progress, and more
+- **Duplicate Prevention**: Uses MD5 hash to prevent adding duplicate books
+- **Reading Progress Tracking**: Automatically tracks and displays last read chapter
+- **Quick Access**: One-tap access to continue reading from where you left off
+- **Remove Books**: Easy removal of books from bookshelf with confirmation dialog
+
 ## Dependencies
 
 This project uses the following main dependencies:
@@ -35,6 +45,8 @@ This project uses the following main dependencies:
 - **highlight**: Code syntax highlighting
 - **html**: HTML parsing
 - **shared_preferences**: Local data storage (saves settings and reading progress)
+- **path_provider**: File system path utilities
+- **crypto**: MD5 hash calculation for duplicate detection
 - **flutter_launcher_icons**: App icon generation tool
 
 ## Usage
@@ -50,11 +62,35 @@ This project uses the following main dependencies:
    ```
 
 3. **Open ePub Files**
+   
+   **Method 1: From Home Page**
    - Click the "Select ePub File" button on the main interface
    - Choose the .epub file you want to read from your device
+   - Optionally add to bookshelf when prompted
    - The app will automatically load and display the book content
+   
+   **Method 2: From Bookshelf**
+   - Click "My Bookshelf" button or bookmark icon
+   - Browse your book collection with cover previews
+   - Tap any book to view details
+   - Click "Open Book" to start reading
 
-4. **Reading Operations**
+4. **Bookshelf Operations**
+   - **View Bookshelf**: Click the bookmark icon in top-right corner or "My Bookshelf" button
+   - **Add Books**: 
+     - From home page: Select file → Choose "Add to Bookshelf"
+     - From reader: Tap bookmark icon in app bar
+   - **View Book Details**: Tap any book card to see:
+     - Book cover (extracted from EPUB or default gradient)
+     - Title and author information
+     - Reading progress
+     - Last read time
+     - File MD5 hash
+   - **Open Book**: Click "Open Book" button in details page
+   - **Remove Book**: Click delete icon in details page or book card
+   - **Refresh**: Pull down to refresh or use refresh button
+
+5. **Reading Operations**
    - **Page Turning Methods**:
      - Tap left edge of screen (20% area) → Previous chapter
      - Tap right edge of screen (20% area) → Next chapter
@@ -76,7 +112,7 @@ This project uses the following main dependencies:
      - Usable in full-screen mode
      - Can be shown/hidden via the "Bottom Navigation Bar" option in settings menu
 
-5. **Persistence Features**
+6. **Persistence Features**
    - Automatically saves reading progress (chapter position)
    - Automatically saves font size settings
    - Automatically saves dark mode preference
@@ -100,9 +136,25 @@ The reader can properly identify and display code blocks in ePub files, includin
 
 ```
 lib/
-├── main.dart                 # Application entry point and home page
-├── epub_viewer.dart          # Main ePub reader component
-└── code_block_widget.dart    # Code block display component
+├── main.dart                      # Application entry point and home page
+├── epub_viewer.dart               # Main ePub reader component
+├── models/
+│   ├── bookshelf_item.dart        # Bookshelf data model
+│   └── flat_chapter.dart          # Chapter data model
+├── services/
+│   ├── bookshelf_service.dart     # Bookshelf management service
+│   ├── epub_parser_service.dart   # EPUB parsing service
+│   ├── preferences_service.dart   # Settings persistence service
+│   └── search_service.dart        # Search functionality service
+└── widgets/
+    ├── bookshelf_page.dart        # Bookshelf grid view
+    ├── book_detail_page.dart      # Book details page
+    ├── reader_content.dart        # Reader content display
+    ├── reader_navigation_bar.dart # Bottom navigation bar
+    ├── reader_settings_menu.dart  # Settings menu
+    ├── chapter_list_panel.dart    # Chapter list panel
+    ├── search_result_panel.dart   # Search results panel
+    └── code_block_widget.dart     # Code block display component
 ```
 
 ## Notes
@@ -143,6 +195,14 @@ Uses `shared_preferences` for local data storage:
 - Automatically saves user's reading progress and personalized settings
 - Fully automated without manual user operation
 
+### Bookshelf Storage
+
+Books are stored in the application documents directory:
+- **Book Files**: Copied to `epub_books/` with MD5-based filenames
+- **Cover Images**: Stored in `epub_books/covers/` as JPG files
+- **Metadata**: Saved in SharedPreferences as JSON
+- **Duplicate Detection**: MD5 hash prevents adding the same book twice
+
 ### App Configuration
 
 #### Modify App Name
@@ -155,15 +215,16 @@ Uses `shared_preferences` for local data storage:
 - [ ] Add annotation and highlighting features
 - [ ] Support tree-structured table of contents display (collapsible/expandable)
 - [ ] Add reading statistics (reading time, progress percentage, daily reading volume, etc.)
-- [ ] Cloud sync for reading progress and settings
+- [ ] Cloud sync for reading progress and bookshelf
 - [ ] Support custom themes and color schemes
 - [ ] Add text-to-speech (TTS) reading function
 - [ ] Support automatic landscape/portrait orientation adaptation
-- [ ] Add book cover display and management
 - [ ] Support multi-language interface switching
 - [ ] Export notes and annotations feature
-- [ ] Bookshelf management (favorites, categories, sorting)
+- [ ] Bookshelf categories and tags
 - [ ] Offline download and cache management
+- [ ] Book search within bookshelf
+- [ ] Sort books by various criteria (date added, last read, title, etc.)
 
 ## License
 
