@@ -63,42 +63,33 @@ class _EpubViewerState extends State<EpubViewer> {
     _prefs = await SharedPreferences.getInstance();
     
     // 加载保存的设置
-    _loadSettings();
+    _loadSettings(_prefs!);
     
     // 加载 EPUB 文件
     await _loadEpub();
   }
   
   /// 加载保存的设置
-  void _loadSettings() {
+  void _loadSettings(SharedPreferences prefs) {
     // 生成基于文件名的唯一键
     final String fileKey = widget.fileName.hashCode.toString();
     
     setState(() {
-      _fontSize = _prefs?.getDouble(_keyFontSize + fileKey) ?? 16.0;
-      _isDarkMode = _prefs?.getBool(_keyDarkMode + fileKey) ?? false;
-      _currentChapterIndex = _prefs?.getInt(_keyChapterIndex + fileKey) ?? 0;
-    });
-    
-    // 3秒后自动隐藏菜单提示
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _showMenu = false;
-        });
-      }
+      _fontSize = prefs.getDouble(_keyFontSize + fileKey) ?? 16.0;
+      _isDarkMode = prefs.getBool(_keyDarkMode + fileKey) ?? false;
+      _currentChapterIndex = prefs.getInt(_keyChapterIndex + fileKey) ?? 0;
     });
   }
   
   /// 保存设置
   Future<void> _saveSettings() async {
-    if (_prefs == null) return;
+    final prefs = await SharedPreferences.getInstance();
     
     final String fileKey = widget.fileName.hashCode.toString();
     
-    await _prefs?.setDouble(_keyFontSize + fileKey, _fontSize);
-    await _prefs?.setBool(_keyDarkMode + fileKey, _isDarkMode);
-    await _prefs?.setInt(_keyChapterIndex + fileKey, _currentChapterIndex);
+    await prefs.setDouble(_keyFontSize + fileKey, _fontSize);
+    await prefs.setBool(_keyDarkMode + fileKey, _isDarkMode);
+    await prefs.setInt(_keyChapterIndex + fileKey, _currentChapterIndex);
   }
 
   Future<void> _loadEpub() async {
@@ -110,6 +101,16 @@ class _EpubViewerState extends State<EpubViewer> {
 
       print('开始解析 EPUB 文件...');
       print('文件大小: ${widget.epubBytes.length} bytes');
+      
+      // 验证文件数据
+      if (widget.epubBytes.isEmpty) {
+        throw Exception('文件内容为空');
+      }
+      
+      // 检查文件头是否为有效的 ZIP/EPUB 格式
+      if (widget.epubBytes.length < 4) {
+        throw Exception('文件格式无效：文件太小');
+      }
       
       EpubBook book = await EpubReader.readBook(widget.epubBytes);
       
@@ -123,6 +124,11 @@ class _EpubViewerState extends State<EpubViewer> {
         print('Chapters 为空,尝试从 Content 中读取...');
         if (book.Content != null && book.Content!.Html != null) {
           print('HTML 文件数: ${book.Content!.Html!.length}');
+          // 如果有 HTML 文件但没有 Chapters，尝试从 HTML 文件创建章节
+          if (book.Content!.Html!.isNotEmpty) {
+            print('使用 HTML 文件作为章节');
+            // 这里可以添加从 HTML 文件创建章节的逻辑
+          }
         }
         throw Exception('该 EPUB 文件没有可识别的章节内容,可能是格式不兼容或文件损坏');
       }
@@ -131,32 +137,48 @@ class _EpubViewerState extends State<EpubViewer> {
       
       // 打印章节信息用于调试
       for (int i = 0; i < chapters.length; i++) {
-        print('章节 $i: ${chapters[i].Title}, 内容长度: ${chapters[i].HtmlContent?.length ?? 0}');
-        _printSubChapters(chapters[i], level: 1);
+        try {
+          print('章节 $i: ${chapters[i].Title}, 内容长度: ${chapters[i].HtmlContent?.length ?? 0}');
+          _printSubChapters(chapters[i], level: 1);
+        } catch (e) {
+          print('处理章节 $i 时出错: $e');
+        }
       }
       
       // 创建扁平化的章节列表
       List<_FlatChapter> flatChapters = [];
-      _flattenChapters(chapters, flatChapters);
+      try {
+        _flattenChapters(chapters, flatChapters);
+      } catch (e) {
+        print('扁平化章节时出错: $e');
+        throw Exception('处理章节结构失败: $e');
+      }
       
       print('扁平化后章节总数: ${flatChapters.length}');
+      
+      if (flatChapters.isEmpty) {
+        throw Exception('没有可用的章节内容');
+      }
 
-      setState(() {
-        _flatChapters = flatChapters;
-        // 保持已加载的章节索引，但如果超出范围则重置为0
-        if (_currentChapterIndex >= flatChapters.length) {
-          _currentChapterIndex = 0;
-        }
-        _isLoading = false;
-        _showMenu = true; // 首次加载时显示菜单提示
-      });
+      if (mounted) {
+        setState(() {
+          _flatChapters = flatChapters;
+          // 保持已加载的章节索引，但如果超出范围则重置为0
+          if (_currentChapterIndex >= flatChapters.length) {
+            _currentChapterIndex = 0;
+          }
+          _isLoading = false;
+        });
+      }
     } catch (e, stackTrace) {
       print('解析 EPUB 失败: $e');
       print('堆栈跟踪: $stackTrace');
-      setState(() {
-        _isLoading = false;
-        _error = '加载 ePub 文件失败:\n$e\n\n可能的原因:\n1. 文件格式不兼容\n2. 文件已损坏\n3. 文件有 DRM 保护\n4. EPUB 版本不支持';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = '加载 ePub 文件失败:\n$e\n\n可能的原因:\n1. 文件格式不兼容\n2. 文件已损坏\n3. 文件有 DRM 保护\n4. EPUB 版本不支持\n5. 文件内容为空';
+        });
+      }
     }
   }
   
@@ -426,29 +448,6 @@ class _EpubViewerState extends State<EpubViewer> {
       child: Theme(
         data: _isDarkMode ? ThemeData.dark() : ThemeData.light(),
         child: Scaffold(
-          appBar: _isFullScreen ? null : AppBar(
-            title: Text(
-              widget.fileName,
-              style: const TextStyle(fontSize: 16),
-            ),
-            backgroundColor: _isDarkMode 
-                ? Colors.grey[900] 
-                : Theme.of(context).colorScheme.inversePrimary,
-            actions: [
-              // 简化AppBar，只保留章节列表和全屏按钮
-              // 其他功能已移至点击中间区域弹出的菜单中
-              IconButton(
-                icon: const Icon(Icons.list),
-                onPressed: _showChapterList,
-                tooltip: '章节列表',
-              ),
-              IconButton(
-                icon: Icon(_isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                onPressed: _toggleFullScreen,
-                tooltip: _isFullScreen ? '退出全屏' : '全屏模式',
-              ),
-            ],
-          ),
           body: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
@@ -481,10 +480,10 @@ class _EpubViewerState extends State<EpubViewer> {
                             else if (tapX > screenWidth - edgeWidth) {
                               _nextChapter();
                             }
-                            // 点击中间区域：显示/隐藏菜单
-                            else {
-                              _toggleMenu();
-                            }
+                          },
+                          onDoubleTap: () {
+                            // 双击显示/隐藏菜单
+                            _toggleMenu();
                           },
                           onHorizontalDragEnd: (details) {
                             // 检测水平滑动速度
@@ -665,36 +664,20 @@ class _EpubViewerState extends State<EpubViewer> {
       color: _isDarkMode ? Colors.grey[900] : Colors.white,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (chapter.Title != null && chapter.Title!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Text(
-                  chapter.Title!,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: _fontSize + 4, // 标题比正文大4号
-                      ),
-                ),
-              ),
-            HtmlWidget(
-              content,
-              customWidgetBuilder: (element) {
-                // 处理代码块
-                if (element.localName == 'pre') {
-                  return CodeBlockWidget(element: element);
-                }
-                return null;
-              },
-              textStyle: TextStyle(
-                fontSize: _fontSize,
-                height: 1.6, // 行高
-                color: _isDarkMode ? Colors.grey[300] : Colors.black87,
-              ),
-            ),
-          ],
+        child: HtmlWidget(
+          content,
+          customWidgetBuilder: (element) {
+            // 处理代码块
+            if (element.localName == 'pre') {
+              return CodeBlockWidget(element: element);
+            }
+            return null;
+          },
+          textStyle: TextStyle(
+            fontSize: _fontSize,
+            height: 1.6, // 行高
+            color: _isDarkMode ? Colors.grey[300] : Colors.black87,
+          ),
         ),
       ),
     );
