@@ -48,11 +48,28 @@ class CodeBlockWidget extends StatelessWidget {
           ),
           const Divider(height: 1, color: Colors.grey),
           // 代码内容
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: _buildHighlightedCode(codeText, language),
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width - 48,
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 行号列
+                    _buildLineNumbers(codeText),
+                    const SizedBox(width: 12),
+                    // 代码内容列
+                    Flexible(
+                      child: _buildHighlightedCode(codeText, language),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -126,7 +143,7 @@ class CodeBlockWidget extends StatelessWidget {
     }
 
     // 回退到纯文本显示
-    return SelectableText(
+    return Text(
       code,
       style: const TextStyle(
         fontFamily: 'monospace',
@@ -134,12 +151,13 @@ class CodeBlockWidget extends StatelessWidget {
         color: Colors.white,
         height: 1.5,
       ),
+      textAlign: TextAlign.left,
     );
   }
 
   Widget _buildRichText(List<Node> nodes) {
     List<TextSpan> spans = _parseNodes(nodes);
-    return SelectableText.rich(
+    return Text(
       TextSpan(
         children: spans,
         style: const TextStyle(
@@ -147,7 +165,39 @@ class CodeBlockWidget extends StatelessWidget {
           fontSize: 14,
           height: 1.5,
         ),
+      ).toPlainText(),
+      style: const TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 14,
+        height: 1.5,
       ),
+      textAlign: TextAlign.left,
+    );
+  }
+
+  Widget _buildLineNumbers(String code) {
+    int lineCount = code.split('\n').length;
+    List<Widget> lineNumberWidgets = [];
+    
+    for (int i = 1; i <= lineCount; i++) {
+      lineNumberWidgets.add(
+        Text(
+          '$i',
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 14,
+            color: Colors.grey[600],
+            height: 1.5,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      );
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: lineNumberWidgets,
     );
   }
 
