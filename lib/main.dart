@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'epub_viewer.dart';
+import 'models/bookshelf_item.dart';
+import 'services/bookshelf_service.dart';
+import 'widgets/bookshelf_page.dart';
 
 void main() {
   runApp(const EpubReaderApp());
@@ -38,11 +41,18 @@ class _EpubHomePageState extends State<EpubHomePage> {
   String? _fileName;
   bool _isLoading = false;
   static const platform = MethodChannel('com.colin2wang.epub_reader/file');
+  final BookshelfService _bookshelfService = BookshelfService();
 
   @override
   void initState() {
     super.initState();
     _setupMethodChannel();
+    _initializeBookshelf();
+  }
+
+  /// 初始化书架服务
+  Future<void> _initializeBookshelf() async {
+    await _bookshelfService.initialize();
   }
 
   void _setupMethodChannel() {
@@ -74,6 +84,72 @@ class _EpubHomePageState extends State<EpubHomePage> {
     );
   }
 
+  /// 打开书架页面
+  void _openBookshelf() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookshelfPage(
+          onBookSelected: _openBookFromShelf,
+          onAddBook: _openEpubFile,
+        ),
+      ),
+    ).then((_) {
+      // 从书架页面返回时，不需要特殊处理
+    });
+  }
+
+  /// 从书架打开书籍
+  Future<void> _openBookFromShelf(BookshelfItem book) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final fileBytes = await _bookshelfService.readBookFile(book.id);
+      
+      if (fileBytes == null || fileBytes.isEmpty) {
+        throw Exception('无法读取书籍文件');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // 关闭书架页面
+        Navigator.pop(context);
+
+        // 打开阅读器
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EpubViewer(
+              epubBytes: Uint8List.fromList(fileBytes),
+              fileName: book.fileName,
+              filePath: book.filePath,
+            ),
+          ),
+        );
+        
+        // 从阅读器返回后，如果需要可以做一些处理
+      }
+    } catch (e) {
+      print('打开书籍失败: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('打开书籍失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _openEpubFile() async {
     try {
       setState(() {
@@ -95,10 +171,12 @@ class _EpubHomePageState extends State<EpubHomePage> {
         }
         
         Uint8List fileBytes;
+        String? filePath;
         
         // 优先使用 bytes，如果为 null 则从路径读取文件
         if (file.bytes != null && file.bytes!.isNotEmpty) {
           fileBytes = file.bytes!;
+          filePath = file.path; // 保存文件路径用于添加到书架
           print('从内存加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
         } else if (file.path != null && file.path!.isNotEmpty) {
           try {
@@ -107,6 +185,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
               throw Exception('文件不存在: ${file.path}');
             }
             fileBytes = await sourceFile.readAsBytes();
+            filePath = file.path;
             print('从路径加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
           } catch (e) {
             throw Exception('读取文件失败: $e');
@@ -126,12 +205,21 @@ class _EpubHomePageState extends State<EpubHomePage> {
             _isLoading = false;
           });
           
+          // 询问用户是否添加到书架
+          final addToShelf = await _showAddToShelfDialog(file.name);
+          
+          if (addToShelf == true && filePath != null) {
+            // 添加到书架
+            await _addToShelf(file.name, filePath);
+          }
+          
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => EpubViewer(
                 epubBytes: fileBytes,
                 fileName: _fileName!,
+                filePath: filePath,
               ),
             ),
           );
@@ -159,12 +247,66 @@ class _EpubHomePageState extends State<EpubHomePage> {
     }
   }
 
+  /// 显示添加到书架对话框
+  Future<bool?> _showAddToShelfDialog(String fileName) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加到书架'),
+        content: Text('是否将 "$fileName" 添加到书架？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('仅打开'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('添加到书架'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 添加书籍到书架
+  Future<void> _addToShelf(String fileName, String filePath) async {
+    try {
+      final book = await _bookshelfService.addBook(fileName, filePath);
+      
+      if (mounted) {
+        if (book != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已添加到书架: $fileName')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('添加到书架失败')),
+          );
+        }
+      }
+    } catch (e) {
+      print('添加到书架失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('添加到书架失败: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ePub Reader'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmarks),
+            onPressed: _openBookshelf,
+            tooltip: '我的书架',
+          ),
+        ],
       ),
       body: Center(
         child: Column(
@@ -204,6 +346,18 @@ class _EpubHomePageState extends State<EpubHomePage> {
                       ),
                     ),
                   ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _openBookshelf,
+              icon: const Icon(Icons.bookmarks),
+              label: const Text('我的书架'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),

@@ -3,7 +3,9 @@ import 'package:epubx/epubx.dart' hide Image;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'models/bookshelf_item.dart';
 import 'models/flat_chapter.dart';
+import 'services/bookshelf_service.dart';
 import 'services/epub_parser_service.dart';
 import 'services/preferences_service.dart';
 import 'services/search_service.dart';
@@ -16,11 +18,13 @@ import 'widgets/reader_settings_menu.dart';
 class EpubViewer extends StatefulWidget {
   final Uint8List epubBytes;
   final String fileName;
+  final String? filePath; // 可选的文件路径，用于加入书架
 
   const EpubViewer({
     super.key,
     required this.epubBytes,
     required this.fileName,
+    this.filePath,
   });
 
   @override
@@ -47,6 +51,8 @@ class _EpubViewerState extends State<EpubViewer> {
   // 控制器和服务
   final TextEditingController _searchController = TextEditingController();
   final PreferencesService _preferencesService = PreferencesService();
+  final BookshelfService _bookshelfService = BookshelfService();
+  bool _isInBookshelf = false;
 
   @override
   void initState() {
@@ -63,8 +69,17 @@ class _EpubViewerState extends State<EpubViewer> {
   /// 初始化偏好设置
   Future<void> _initializePreferences() async {
     await _preferencesService.initialize();
+    await _bookshelfService.initialize();
     _loadSettings();
+    _checkIfInBookshelf();
     await _loadEpub();
+  }
+  
+  /// 检查书籍是否已在书架中
+  void _checkIfInBookshelf() {
+    setState(() {
+      _isInBookshelf = _bookshelfService.isBookInShelf(widget.fileName);
+    });
   }
   
   /// 加载保存的设置
@@ -195,6 +210,79 @@ class _EpubViewerState extends State<EpubViewer> {
     _saveSettings();
   }
 
+  /// 添加或移除书架
+  Future<void> _toggleBookshelf() async {
+    if (_isInBookshelf) {
+      // 从书架移除
+      try {
+        final book = _bookshelfService.getAllBooks().firstWhere(
+          (b) => b.fileName == widget.fileName,
+        );
+        
+        final success = await _bookshelfService.removeBook(book.id);
+        
+        if (mounted) {
+          setState(() => _isInBookshelf = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已从书架移除: ${widget.fileName}')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('书籍不在书架中')),
+          );
+        }
+      }
+    } else {
+      // 添加到书架
+      if (widget.filePath != null && widget.filePath!.isNotEmpty) {
+        try {
+          final book = await _bookshelfService.addBook(widget.fileName, widget.filePath!);
+          
+          if (mounted) {
+            if (book != null) {
+              setState(() => _isInBookshelf = true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已添加到书架: ${widget.fileName}')),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('添加到书架失败')),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('添加到书架失败: $e')),
+            );
+          }
+        }
+      } else {
+        // 没有文件路径，需要先保存文件
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('添加到书架'),
+              content: const Text(
+                '当前打开的文件无法直接添加到书架。\n\n'
+                '请返回主页，重新选择文件并点击“添加到书架”。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('知道了'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
+  }
+
   /// 切换菜单显示
   void _toggleMenu() {
     setState(() => _showMenu = !_showMenu);
@@ -304,6 +392,14 @@ class _EpubViewerState extends State<EpubViewer> {
           ? Colors.grey[900] 
           : Theme.of(context).colorScheme.inversePrimary,
       actions: [
+        IconButton(
+          icon: Icon(
+            _isInBookshelf ? Icons.bookmark : Icons.bookmark_border,
+            color: _isInBookshelf ? Colors.amber : null,
+          ),
+          onPressed: _toggleBookshelf,
+          tooltip: _isInBookshelf ? '从书架移除' : '加入书架',
+        ),
         IconButton(
           icon: const Icon(Icons.list),
           onPressed: _showChapterList,

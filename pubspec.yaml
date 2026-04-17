@@ -55,6 +55,9 @@ dependencies:
   
   # Persistent storage for settings and reading progress
   shared_preferences: ^2.2.2
+  
+  # Crypto for MD5 calculation
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
