@@ -9,7 +9,7 @@ import 'package:html/dom.dart' as dom;
 import '../code_block_widget.dart';
 
 /// 阅读器内容组件 - 显示 EPUB 章节内容
-class ReaderContent extends StatelessWidget {
+class ReaderContent extends StatefulWidget {
   final EpubChapter? chapter;
   final double fontSize;
   final bool isDarkMode;
@@ -24,49 +24,91 @@ class ReaderContent extends StatelessWidget {
   });
 
   @override
+  State<ReaderContent> createState() => _ReaderContentState();
+}
+
+class _ReaderContentState extends State<ReaderContent> {
+  late ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    // 初始化时确保滚动到顶部
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(ReaderContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当章节变化时，立即滚动到顶部
+    if (oldWidget.chapter != widget.chapter) {
+      // 使用 jumpTo 立即跳转，避免动画延迟
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (chapter == null) {
+    if (widget.chapter == null) {
       return const Center(child: Text('没有内容'));
     }
 
-    String? content = chapter!.HtmlContent;
+    String? content = widget.chapter!.HtmlContent;
 
     if (content == null || content.isEmpty) {
       return const Center(child: Text('章节内容为空'));
     }
 
-    return Container(
-      color: isDarkMode ? Colors.grey[900] : Colors.white,
-      constraints: BoxConstraints(
-        minHeight: MediaQuery.of(context).size.height,
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: HtmlWidget(
-          content,
-          customWidgetBuilder: (element) {
-            // 处理代码块
-            if (element.localName == 'pre') {
-              return CodeBlockWidget(element: element);
-            }
-            // 处理图片
-            if (element.localName == 'img') {
-              return _buildEpubImage(element);
-            }
-            return null;
-          },
-          textStyle: TextStyle(
-            fontSize: fontSize,
-            height: 1.6, // 行高
-            color: isDarkMode ? Colors.grey[300] : Colors.black87,
+    return SafeArea(
+      child: Container(
+        color: widget.isDarkMode ? Colors.grey[900] : Colors.white,
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height,
+        ),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(16.0),
+          child: HtmlWidget(
+            widget.chapter!.HtmlContent!,
+            customWidgetBuilder: (element) {
+              // 处理代码块
+              if (element.localName == 'pre') {
+                return CodeBlockWidget(element: element);
+              }
+              // 处理图片
+              if (element.localName == 'img') {
+                return _buildEpubImage(element);
+              }
+              return null;
+            },
+            textStyle: TextStyle(
+              fontSize: widget.fontSize,
+              height: 1.6, // 行高
+              color: widget.isDarkMode ? Colors.grey[300] : Colors.black87,
+            ),
+            onLoadingBuilder: (context, element, loadingProgress) {
+              return const Center(child: CircularProgressIndicator());
+            },
+            onErrorBuilder: (context, element, error) {
+              developer.log('HTML 渲染错误', error: error);
+              return const Icon(Icons.error, color: Colors.red);
+            },
           ),
-          onLoadingBuilder: (context, element, loadingProgress) {
-            return const Center(child: CircularProgressIndicator());
-          },
-          onErrorBuilder: (context, element, error) {
-            developer.log('HTML 渲染错误', error: error);
-            return const Icon(Icons.error, color: Colors.red);
-          },
         ),
       ),
     );
@@ -76,12 +118,12 @@ class ReaderContent extends StatelessWidget {
   Widget? _buildEpubImage(dom.Element element) {
     try {
       final src = element.attributes['src'];
-      if (src == null || src.isEmpty || epubBook == null) {
+      if (src == null || src.isEmpty || widget.epubBook == null) {
         return null;
       }
 
       // 从 EPUB 内容中查找图片
-      final images = epubBook!.Content?.Images;
+      final images = widget.epubBook!.Content?.Images;
       if (images == null) {
         return null;
       }

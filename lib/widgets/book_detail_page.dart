@@ -98,142 +98,146 @@ class _BookDetailPageState extends State<BookDetailPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 封面图片
-            Center(
-              child: Container(
-                width: 200,
-                height: 280,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 封面图片
+              Center(
+                child: Container(
+                  width: 200,
+                  height: 280,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _buildCoverImage(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // 书籍标题
+              Text(
+                widget.book.title ?? widget.book.fileName,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // 作者
+              if (widget.book.author != null) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.book.author!,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Colors.grey[700],
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildCoverImage(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // 书籍标题
-            Text(
-              widget.book.title ?? widget.book.fileName,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // 作者
-            if (widget.book.author != null) ...[
+                const SizedBox(height: 8),
+              ],
+              
+              // 文件名
               Row(
                 children: [
-                  const Icon(Icons.person, size: 18, color: Colors.grey),
+                  const Icon(Icons.description, size: 18, color: Colors.grey),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.book.author!,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Colors.grey[700],
+                      widget.book.fileName,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[600],
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-            ],
-            
-            // 文件名
-            Row(
-              children: [
-                const Icon(Icons.description, size: 18, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.book.fileName,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
+              const SizedBox(height: 24),
+              
+              // 分隔线
+              const Divider(thickness: 1),
+              const SizedBox(height: 16),
+              
+              // 阅读进度
+              if (widget.book.lastReadChapterIndex != null && widget.book.lastReadChapterIndex! > 0) ...[
+                _buildInfoRow(
+                  Icons.check_circle,
+                  '阅读进度',
+                  '第 ${widget.book.lastReadChapterIndex! + 1} 章',
+                  Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+              ],
+              
+              // 添加时间
+              _buildInfoRow(
+                Icons.add_circle,
+                '添加时间',
+                _formatDate(widget.book.addedDate),
+              ),
+              const SizedBox(height: 12),
+              
+              // 最后阅读时间
+              if (widget.book.lastReadDate != null) ...[
+                _buildInfoRow(
+                  Icons.access_time,
+                  '最后阅读',
+                  _formatDate(widget.book.lastReadDate!),
+                ),
+                const SizedBox(height: 12),
+              ],
+              
+              // MD5
+              _buildInfoRow(
+                Icons.fingerprint,
+                '文件MD5',
+                widget.book.md5.substring(0, 16) + '...',
+                Colors.grey,
+                12,
+              ),
+              
+              const SizedBox(height: 32),
+              
+              // 打开书籍按钮
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: _openBook,
+                  icon: const Icon(Icons.menu_book, size: 24),
+                  label: const Text(
+                    '打开书籍',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            // 分隔线
-            const Divider(thickness: 1),
-            const SizedBox(height: 16),
-            
-            // 阅读进度
-            if (widget.book.lastReadChapterIndex != null && widget.book.lastReadChapterIndex! > 0) ...[
-              _buildInfoRow(
-                Icons.check_circle,
-                '阅读进度',
-                '第 ${widget.book.lastReadChapterIndex! + 1} 章',
-                Theme.of(context).colorScheme.primary,
               ),
-              const SizedBox(height: 12),
+              // 添加底部间距，防止被导航栏遮挡
+              const SizedBox(height: 16),
             ],
-            
-            // 添加时间
-            _buildInfoRow(
-              Icons.add_circle,
-              '添加时间',
-              _formatDate(widget.book.addedDate),
-            ),
-            const SizedBox(height: 12),
-            
-            // 最后阅读时间
-            if (widget.book.lastReadDate != null) ...[
-              _buildInfoRow(
-                Icons.access_time,
-                '最后阅读',
-                _formatDate(widget.book.lastReadDate!),
-              ),
-              const SizedBox(height: 12),
-            ],
-            
-            // MD5
-            _buildInfoRow(
-              Icons.fingerprint,
-              '文件MD5',
-              widget.book.md5.substring(0, 16) + '...',
-              Colors.grey,
-              12,
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // 打开书籍按钮
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _openBook,
-                icon: const Icon(Icons.menu_book, size: 24),
-                label: const Text(
-                  '打开书籍',
-                  style: TextStyle(fontSize: 18),
-                ),
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

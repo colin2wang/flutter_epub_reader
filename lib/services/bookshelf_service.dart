@@ -82,24 +82,62 @@ class BookshelfService {
       // 提取封面
       String? coverImagePath;
       try {
+        Uint8List? imageBytes;
+        
+        // 方法1: 尝试从 CoverImage 获取（如果它是 EpubByteContentFile）
         final coverImage = epubBook.CoverImage;
         if (coverImage != null) {
-          // 尝试从 CoverImage 获取字节数据
-          Uint8List? imageBytes;
-          
-          // 使用动态类型访问 Content 属性
           try {
-            final dynamicContent = (coverImage as dynamic).Content;
-            if (dynamicContent is Uint8List && dynamicContent.isNotEmpty) {
-              imageBytes = dynamicContent;
+            // 使用动态类型检查是否是 EpubByteContentFile
+            final dynamicCover = coverImage as dynamic;
+            if (dynamicCover.Content is Uint8List) {
+              imageBytes = dynamicCover.Content as Uint8List;
             }
           } catch (e) {
-            _logger.error('无法通过Content获取封面: $e');
+            _logger.debug('CoverImage 不是 EpubByteContentFile 类型: $e');
           }
-          
-          if (imageBytes != null && imageBytes.isNotEmpty) {
-            coverImagePath = await _saveCoverImage(md5, imageBytes);
+        }
+        
+        // 方法2: 如果 CoverImage 无法获取，尝试从 Content.Images 中查找
+        if (imageBytes == null || imageBytes.isEmpty) {
+          final images = epubBook.Content?.Images;
+          if (images != null && images.isNotEmpty) {
+            // 尝试查找常见的封面图片名称
+            final coverKeys = [
+              'cover',
+              'Cover',
+              'COVER',
+              'cover.jpg',
+              'cover.png',
+              'Cover.jpg',
+              'Cover.png',
+            ];
+            
+            for (final key in coverKeys) {
+              if (images.containsKey(key)) {
+                final imageFile = images[key];
+                if (imageFile?.Content != null && imageFile!.Content!.isNotEmpty) {
+                  imageBytes = Uint8List.fromList(imageFile.Content!);
+                  _logger.debug('从 Content.Images 找到封面: $key');
+                  break;
+                }
+              }
+            }
+            
+            // 如果还没找到，使用第一张图片
+            if ((imageBytes == null || imageBytes.isEmpty) && images.isNotEmpty) {
+              final firstImage = images.values.first;
+              if (firstImage.Content != null && firstImage.Content!.isNotEmpty) {
+                imageBytes = Uint8List.fromList(firstImage.Content!);
+                _logger.debug('使用第一张图片作为封面');
+              }
+            }
           }
+        }
+        
+        // 保存封面图片
+        if (imageBytes != null && imageBytes.isNotEmpty) {
+          coverImagePath = await _saveCoverImage(md5, imageBytes);
         }
       } catch (e) {
         _logger.error('提取封面失败: $e');

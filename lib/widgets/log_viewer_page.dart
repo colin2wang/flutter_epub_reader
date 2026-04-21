@@ -160,7 +160,8 @@ class _LogViewerPageState extends State<LogViewerPage> {
           ),
         ],
       ),
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
           // 过滤栏
           Container(
@@ -254,6 +255,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
           ),
         ],
       ),
+    ),
     );
   }
 

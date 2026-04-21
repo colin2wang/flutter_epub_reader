@@ -97,6 +97,11 @@ class _EpubHomePageState extends State<EpubHomePage> {
         builder: (context) => BookshelfPage(
           onBookSelected: _openBookFromShelf,
           onAddBook: _openEpubFile,
+          onBooksChanged: () {
+            // 当书架数据变化时,可以在这里执行额外操作
+            // 例如更新主页面的状态或显示通知
+            _loggerService.info('书架数据已更新');
+          },
         ),
       ),
     ).then((_) {
@@ -366,7 +371,8 @@ class _EpubHomePageState extends State<EpubHomePage> {
           ),
         ],
       ),
-      body: Center(
+      body: SafeArea(
+        child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -428,6 +434,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
           ],
         ),
       ),
+    ),
     );
   }
 }

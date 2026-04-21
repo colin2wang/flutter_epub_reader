@@ -25,15 +25,21 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
 - **Chapter List**: Flat display of all chapters (including sub-chapters) with level indentation
 - **Bottom Navigation Bar**: Displays page numbers and navigation buttons, usable in full-screen mode
 - **Auto-save**: Automatically saves reading progress and settings, restores on next open
+- **Smart Scrolling**: Automatically scrolls to top when switching chapters for better reading experience
+  - Chapter transitions start from the beginning of content
+  - No more getting stuck in the middle of long chapters
 
 ### Bookshelf Features
 - **Add to Bookshelf**: Add books from file picker or directly from reader
 - **Cover Display**: Automatic extraction and display of book covers from EPUB files
 - **Book Details Page**: View detailed information including title, author, reading progress, and more
+  - Scrollable content with safe area protection
+  - Complete book metadata display
 - **Duplicate Prevention**: Uses MD5 hash to prevent adding duplicate books
 - **Reading Progress Tracking**: Automatically tracks and displays last read chapter
 - **Quick Access**: One-tap access to continue reading from where you left off
 - **Remove Books**: Easy removal of books from bookshelf with confirmation dialog
+- **Sorting Options**: Sort books by added date, last read date, title, author, or reading progress
 
 ### Logging Features
 - **Real-time Log Viewer**: Built-in log window displays application runtime logs
@@ -43,9 +49,15 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
 - **Persistent Storage**: Logs saved to file with 10MB size limit
 - **Easy Access**: Click bug icon in app bar to open log viewer
 
-## Dependencies
+### UI/UX Improvements
+- **Safe Area Support**: All pages properly handle notches, status bars, and navigation bars
+  - Home page, bookshelf, reader, and log viewer all use SafeArea
+  - Content never gets obscured by system UI elements
+  - Consistent experience across different devices and screen sizes
+- **Responsive Layout**: Adapts to various screen sizes and orientations
+- **Smooth Animations**: Chapter transitions include smooth scrolling animations
 
-This project uses the following main dependencies:
+## Dependencies
 
 - **epubx**: EPUB file parsing
 - **file_picker**: File selector
@@ -205,6 +217,22 @@ Uses `shared_preferences` for local data storage:
 - Generates unique storage keys based on file name hash values
 - Automatically saves user's reading progress and personalized settings
 - Fully automated without manual user operation
+
+### Reader Scrolling Implementation
+
+The reader implements smart scrolling behavior for better user experience:
+- **ScrollController Management**: Each chapter content has its own scroll controller
+- **Auto-scroll to Top**: When switching chapters, content automatically scrolls to the beginning
+- **Immediate Positioning**: Uses `jumpTo(0)` for instant positioning without animation delay
+- **State Preservation**: Scroll position is properly managed during widget rebuilds
+
+### Safe Area Handling
+
+All pages implement proper safe area handling:
+- **SafeArea Widget**: Used in all main pages (home, bookshelf, reader, log viewer)
+- **Bottom Navigation**: ReaderNavigationBar uses `SafeArea(top: false)` to only protect bottom
+- **Book Details**: Scrollable content with SafeArea prevents obstruction by navigation bar
+- **Cross-device Compatibility**: Ensures consistent display on devices with notches, punch-holes, and gesture bars
 
 ### Bookshelf Storage
 

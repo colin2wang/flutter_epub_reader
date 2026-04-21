@@ -8,11 +8,13 @@ import 'book_detail_page.dart';
 class BookshelfPage extends StatefulWidget {
   final Function(BookshelfItem) onBookSelected;
   final VoidCallback onAddBook;
+  final VoidCallback? onBooksChanged; // 书籍变化时的回调
 
   const BookshelfPage({
     super.key,
     required this.onBookSelected,
     required this.onAddBook,
+    this.onBooksChanged,
   });
 
   @override
@@ -65,6 +67,9 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
         _sortBooks(); // 应用排序
         _isLoading = false;
       });
+      
+      // 通知外部书架数据已更新
+      widget.onBooksChanged?.call();
     }
   }
   
@@ -299,7 +304,8 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
           ),
         ],
       ),
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
           // 显示当前排序方式
           Container(
@@ -334,6 +340,7 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
           ),
         ],
       ),
+    ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddBook,
         icon: const Icon(Icons.add),
