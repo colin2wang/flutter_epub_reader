@@ -58,6 +58,9 @@ dependencies:
   
   # Crypto for MD5 calculation
   crypto: ^3.0.3
+  
+  # Logging library
+  logger: ^2.0.2+1
 
 dev_dependencies:
   flutter_test:

@@ -7,6 +7,7 @@ import 'models/bookshelf_item.dart';
 import 'models/flat_chapter.dart';
 import 'services/bookshelf_service.dart';
 import 'services/epub_parser_service.dart';
+import 'services/logger_service.dart';
 import 'services/preferences_service.dart';
 import 'services/search_service.dart';
 import 'widgets/reader_content.dart';
@@ -52,6 +53,7 @@ class _EpubViewerState extends State<EpubViewer> {
   final TextEditingController _searchController = TextEditingController();
   final PreferencesService _preferencesService = PreferencesService();
   final BookshelfService _bookshelfService = BookshelfService();
+  final LoggerService _logger = LoggerService();
   bool _isInBookshelf = false;
 
   @override
@@ -135,8 +137,8 @@ class _EpubViewerState extends State<EpubViewer> {
   
   /// 处理加载错误
   void _handleLoadError(dynamic error, StackTrace stackTrace) {
-    print('解析 EPUB 失败: $error');
-    print('堆栈跟踪: $stackTrace');
+    _logger.error('解析 EPUB 失败: $error');
+    _logger.error('堆栈跟踪: $stackTrace');
     
     if (mounted) {
       setState(() {

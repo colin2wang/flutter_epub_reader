@@ -8,7 +8,9 @@ import 'package:flutter/services.dart';
 import 'epub_viewer.dart';
 import 'models/bookshelf_item.dart';
 import 'services/bookshelf_service.dart';
+import 'services/logger_service.dart';
 import 'widgets/bookshelf_page.dart';
+import 'widgets/log_viewer_page.dart';
 
 void main() {
   runApp(const EpubReaderApp());
@@ -42,6 +44,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
   bool _isLoading = false;
   static const platform = MethodChannel('com.colin2wang.epub_reader/file');
   final BookshelfService _bookshelfService = BookshelfService();
+  final LoggerService _loggerService = LoggerService();
 
   @override
   void initState() {
@@ -53,6 +56,8 @@ class _EpubHomePageState extends State<EpubHomePage> {
   /// 初始化书架服务
   Future<void> _initializeBookshelf() async {
     await _bookshelfService.initialize();
+    // 初始化日志服务
+    await _loggerService.initialize();
   }
 
   void _setupMethodChannel() {
@@ -63,7 +68,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
         final String fileName = args['fileName'] as String;
         final Uint8List fileBytes = args['fileBytes'] as Uint8List;
         
-        print('收到来自原生代码的文件: $fileName, 大小: ${fileBytes.length} bytes');
+        _loggerService.info('收到来自原生代码的文件: $fileName, 大小: ${fileBytes.length} bytes');
         
         if (mounted) {
           _openFileFromNative(fileName, fileBytes);
@@ -135,7 +140,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
         // 从阅读器返回后，如果需要可以做一些处理
       }
     } catch (e) {
-      print('打开书籍失败: $e');
+      _loggerService.error('打开书籍失败: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -177,7 +182,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
         if (file.bytes != null && file.bytes!.isNotEmpty) {
           fileBytes = file.bytes!;
           filePath = file.path; // 保存文件路径用于添加到书架
-          print('从内存加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
+          _loggerService.info('从内存加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
         } else if (file.path != null && file.path!.isNotEmpty) {
           try {
             final sourceFile = File(file.path!);
@@ -186,7 +191,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
             }
             fileBytes = await sourceFile.readAsBytes();
             filePath = file.path;
-            print('从路径加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
+            _loggerService.info('从路径加载文件: ${file.name}, 大小: ${fileBytes.length} bytes');
           } catch (e) {
             throw Exception('读取文件失败: $e');
           }
@@ -211,18 +216,35 @@ class _EpubHomePageState extends State<EpubHomePage> {
           if (addToShelf == true && filePath != null) {
             // 添加到书架
             await _addToShelf(file.name, filePath);
-          }
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EpubViewer(
-                epubBytes: fileBytes,
-                fileName: _fileName!,
-                filePath: filePath,
+            
+            // 询问用户是否要打开图书
+            final shouldOpen = await _showOpenBookDialog(file.name);
+            
+            if (shouldOpen == true) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EpubViewer(
+                    epubBytes: fileBytes,
+                    fileName: _fileName!,
+                    filePath: filePath,
+                  ),
+                ),
+              );
+            }
+          } else {
+            // 不添加到书架，直接打开
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EpubViewer(
+                  epubBytes: fileBytes,
+                  fileName: _fileName!,
+                  filePath: filePath,
+                ),
               ),
-            ),
-          );
+            );
+          }
         }
       } else {
         if (mounted) {
@@ -232,7 +254,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
         }
       }
     } catch (e) {
-      print('打开文件时出错: $e');
+      _loggerService.error('打开文件时出错: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -257,11 +279,32 @@ class _EpubHomePageState extends State<EpubHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('仅打开'),
+            child: const Text('不添加'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('添加到书架'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示是否打开图书对话框
+  Future<bool?> _showOpenBookDialog(String fileName) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加成功'),
+        content: Text('"$fileName" 已添加到书架\n\n是否现在打开阅读？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('稍后阅读'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('立即打开'),
           ),
         ],
       ),
@@ -285,13 +328,23 @@ class _EpubHomePageState extends State<EpubHomePage> {
         }
       }
     } catch (e) {
-      print('添加到书架失败: $e');
+      _loggerService.error('添加到书架失败: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('添加到书架失败: $e')),
         );
       }
     }
+  }
+
+  /// 打开日志窗口
+  void _openLogViewer() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LogViewerPage(),
+      ),
+    );
   }
 
   @override
@@ -305,6 +358,11 @@ class _EpubHomePageState extends State<EpubHomePage> {
             icon: const Icon(Icons.bookmarks),
             onPressed: _openBookshelf,
             tooltip: '我的书架',
+          ),
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: _openLogViewer,
+            tooltip: '运行日志',
           ),
         ],
       ),

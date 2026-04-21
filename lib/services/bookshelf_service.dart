@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:epubx/epubx.dart' hide Image;
 
 import '../models/bookshelf_item.dart';
+import 'logger_service.dart';
 
 /// 书架服务 - 管理书架数据的持久化存储
 class BookshelfService {
@@ -15,6 +16,7 @@ class BookshelfService {
   
   SharedPreferences? _prefs;
   Directory? _booksDirectory;
+  final LoggerService _logger = LoggerService();
   
   /// 初始化服务
   Future<void> initialize() async {
@@ -45,7 +47,7 @@ class BookshelfService {
       final List<dynamic> jsonList = jsonDecode(jsonData);
       return jsonList.map((json) => BookshelfItem.fromJson(json)).toList();
     } catch (e) {
-      print('解析书架数据失败: $e');
+      _logger.error('解析书架数据失败: $e');
       return [];
     }
   }
@@ -66,7 +68,7 @@ class BookshelfService {
       
       // 检查是否已存在（通过MD5）
       if (isBookInShelfByMD5(md5)) {
-        print('书籍已存在于书架中: $fileName');
+        _logger.warning('书籍已存在于书架中: $fileName');
         return null; // 返回null表示重复
       }
       
@@ -92,7 +94,7 @@ class BookshelfService {
               imageBytes = dynamicContent;
             }
           } catch (e) {
-            print('无法通过Content获取封面: $e');
+            _logger.error('无法通过Content获取封面: $e');
           }
           
           if (imageBytes != null && imageBytes.isNotEmpty) {
@@ -100,7 +102,7 @@ class BookshelfService {
           }
         }
       } catch (e) {
-        print('提取封面失败: $e');
+        _logger.error('提取封面失败: $e');
       }
       
       // 复制文件到应用目录
@@ -123,7 +125,7 @@ class BookshelfService {
       await _saveBooks(books);
       return book;
     } catch (e) {
-      print('添加书籍到书架失败: $e');
+      _logger.error('添加书籍到书架失败: $e');
       return null;
     }
   }
@@ -152,7 +154,7 @@ class BookshelfService {
       
       return true;
     } catch (e) {
-      print('从书架移除书籍失败: $e');
+      _logger.error('从书架移除书籍失败: $e');
       return false;
     }
   }
@@ -183,7 +185,7 @@ class BookshelfService {
       await _saveBooks(books);
       return true;
     } catch (e) {
-      print('更新阅读进度失败: $e');
+      _logger.error('更新阅读进度失败: $e');
       return false;
     }
   }
@@ -239,7 +241,7 @@ class BookshelfService {
       
       return coverPath;
     } catch (e) {
-      print('保存封面失败: $e');
+      _logger.error('保存封面失败: $e');
       return null;
     }
   }

@@ -35,6 +35,14 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
 - **Quick Access**: One-tap access to continue reading from where you left off
 - **Remove Books**: Easy removal of books from bookshelf with confirmation dialog
 
+### Logging Features
+- **Real-time Log Viewer**: Built-in log window displays application runtime logs
+- **Log Filtering**: Filter logs by level (Debug, Info, Warning, Error)
+- **Auto-scroll Control**: Toggle automatic scrolling to follow new logs
+- **FIFO Queue**: Maintains up to 500 most recent log entries in memory
+- **Persistent Storage**: Logs saved to file with 10MB size limit
+- **Easy Access**: Click bug icon in app bar to open log viewer
+
 ## Dependencies
 
 This project uses the following main dependencies:
@@ -47,6 +55,7 @@ This project uses the following main dependencies:
 - **shared_preferences**: Local data storage (saves settings and reading progress)
 - **path_provider**: File system path utilities
 - **crypto**: MD5 hash calculation for duplicate detection
+- **logger**: Structured logging library with multiple outputs
 - **flutter_launcher_icons**: App icon generation tool
 
 ## Usage
@@ -145,10 +154,12 @@ lib/
 │   ├── bookshelf_service.dart     # Bookshelf management service
 │   ├── epub_parser_service.dart   # EPUB parsing service
 │   ├── preferences_service.dart   # Settings persistence service
-│   └── search_service.dart        # Search functionality service
+│   ├── search_service.dart        # Search functionality service
+│   └── logger_service.dart        # Logging service with FIFO queue
 └── widgets/
     ├── bookshelf_page.dart        # Bookshelf grid view
     ├── book_detail_page.dart      # Book details page
+    ├── log_viewer_page.dart       # Real-time log viewer
     ├── reader_content.dart        # Reader content display
     ├── reader_navigation_bar.dart # Bottom navigation bar
     ├── reader_settings_menu.dart  # Settings menu
@@ -202,6 +213,16 @@ Books are stored in the application documents directory:
 - **Cover Images**: Stored in `epub_books/covers/` as JPG files
 - **Metadata**: Saved in SharedPreferences as JSON
 - **Duplicate Detection**: MD5 hash prevents adding the same book twice
+
+### Logging System
+
+The application uses a structured logging system:
+- **Logger Library**: Uses the `logger` package for formatted output
+- **FIFO Queue**: In-memory queue maintains the 500 most recent log entries
+- **File Output**: Logs are persisted to `logs/app_log.txt` in the documents directory
+- **Size Management**: Automatic cleanup when log file exceeds 10MB
+- **Multiple Levels**: Supports Debug, Info, Warning, and Error levels
+- **Real-time Display**: Log viewer updates in real-time using listener pattern
 
 ### App Configuration
 

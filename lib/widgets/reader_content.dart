@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:epubx/epubx.dart' hide Image;
@@ -63,7 +64,7 @@ class ReaderContent extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           },
           onErrorBuilder: (context, element, error) {
-            print('HTML 渲染错误: $error');
+            developer.log('HTML 渲染错误', error: error);
             return const Icon(Icons.error, color: Colors.red);
           },
         ),
@@ -108,7 +109,7 @@ class ReaderContent extends StatelessWidget {
       }
 
       if (imageFile == null) {
-        print('未找到图片: $src');
+        developer.log('未找到图片', name: 'ReaderContent', error: src);
         return const Icon(Icons.broken_image, color: Colors.grey);
       }
 
@@ -118,17 +119,10 @@ class ReaderContent extends StatelessWidget {
         return const Icon(Icons.broken_image, color: Colors.grey);
       }
 
-      // 获取 MIME 类型
-      String mimeType = 'image/png'; // 默认
+      // 获取 MIME 类型（用于调试）
       final mime = imageFile.ContentMimeType;
       if (mime != null && mime.isNotEmpty) {
-        mimeType = mime;
-      } else if (src.toLowerCase().endsWith('.jpg') || src.toLowerCase().endsWith('.jpeg')) {
-        mimeType = 'image/jpeg';
-      } else if (src.toLowerCase().endsWith('.gif')) {
-        mimeType = 'image/gif';
-      } else if (src.toLowerCase().endsWith('.svg')) {
-        mimeType = 'image/svg+xml';
+        developer.log('图片MIME类型', name: 'ReaderContent', error: mime);
       }
 
       // 转换为 Uint8List
@@ -139,12 +133,12 @@ class ReaderContent extends StatelessWidget {
         imageBytes,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) {
-          print('图片加载错误: $error');
+          developer.log('图片加载错误', error: error, stackTrace: stackTrace);
           return const Icon(Icons.broken_image, color: Colors.grey);
         },
       );
-    } catch (e) {
-      print('构建图片失败: $e');
+    } catch (e, stackTrace) {
+      developer.log('构建图片失败', error: e, stackTrace: stackTrace);
       return const Icon(Icons.broken_image, color: Colors.grey);
     }
   }

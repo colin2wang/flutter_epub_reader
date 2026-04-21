@@ -23,6 +23,9 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
   final BookshelfService _bookshelfService = BookshelfService();
   List<BookshelfItem> _books = [];
   bool _isLoading = true;
+  
+  // 排序相关状态
+  SortOption _currentSortOption = SortOption.addedDateDesc;
 
   @override
   void initState() {
@@ -59,8 +62,136 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
     if (mounted) {
       setState(() {
         _books = _bookshelfService.getAllBooks();
+        _sortBooks(); // 应用排序
         _isLoading = false;
       });
+    }
+  }
+  
+  /// 对书籍列表进行排序
+  void _sortBooks() {
+    switch (_currentSortOption) {
+      case SortOption.addedDateAsc:
+        _books.sort((a, b) => a.addedDate.compareTo(b.addedDate));
+        break;
+      case SortOption.addedDateDesc:
+        _books.sort((a, b) => b.addedDate.compareTo(a.addedDate));
+        break;
+      case SortOption.lastReadDateAsc:
+        _books.sort((a, b) {
+          if (a.lastReadDate == null && b.lastReadDate == null) return 0;
+          if (a.lastReadDate == null) return 1;
+          if (b.lastReadDate == null) return -1;
+          return a.lastReadDate!.compareTo(b.lastReadDate!);
+        });
+        break;
+      case SortOption.lastReadDateDesc:
+        _books.sort((a, b) {
+          if (a.lastReadDate == null && b.lastReadDate == null) return 0;
+          if (a.lastReadDate == null) return 1;
+          if (b.lastReadDate == null) return -1;
+          return b.lastReadDate!.compareTo(a.lastReadDate!);
+        });
+        break;
+      case SortOption.titleAsc:
+        _books.sort((a, b) {
+          final titleA = (a.title ?? a.fileName).toLowerCase();
+          final titleB = (b.title ?? b.fileName).toLowerCase();
+          return titleA.compareTo(titleB);
+        });
+        break;
+      case SortOption.titleDesc:
+        _books.sort((a, b) {
+          final titleA = (a.title ?? a.fileName).toLowerCase();
+          final titleB = (b.title ?? b.fileName).toLowerCase();
+          return titleB.compareTo(titleA);
+        });
+        break;
+      case SortOption.authorAsc:
+        _books.sort((a, b) {
+          final authorA = (a.author ?? '').toLowerCase();
+          final authorB = (b.author ?? '').toLowerCase();
+          return authorA.compareTo(authorB);
+        });
+        break;
+      case SortOption.authorDesc:
+        _books.sort((a, b) {
+          final authorA = (a.author ?? '').toLowerCase();
+          final authorB = (b.author ?? '').toLowerCase();
+          return authorB.compareTo(authorA);
+        });
+        break;
+      case SortOption.readingProgress:
+        _books.sort((a, b) {
+          final progressA = a.lastReadChapterIndex ?? -1;
+          final progressB = b.lastReadChapterIndex ?? -1;
+          return progressB.compareTo(progressA); // 有进度的在前
+        });
+        break;
+    }
+  }
+  
+  /// 显示排序选项对话框
+  Future<void> _showSortOptions() async {
+    final selectedOption = await showDialog<SortOption>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('排序方式'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: SortOption.values.map((option) {
+              return RadioListTile<SortOption>(
+                title: Text(_getSortOptionName(option)),
+                value: option,
+                groupValue: _currentSortOption,
+                onChanged: (value) {
+                  if (value != null) {
+                    Navigator.pop(context, value);
+                  }
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+    
+    if (selectedOption != null && selectedOption != _currentSortOption) {
+      setState(() {
+        _currentSortOption = selectedOption;
+        _sortBooks();
+      });
+    }
+  }
+  
+  /// 获取排序选项的显示名称
+  String _getSortOptionName(SortOption option) {
+    switch (option) {
+      case SortOption.addedDateAsc:
+        return '添加时间（最早）';
+      case SortOption.addedDateDesc:
+        return '添加时间（最新）';
+      case SortOption.lastReadDateAsc:
+        return '阅读时间（最早）';
+      case SortOption.lastReadDateDesc:
+        return '阅读时间（最近）';
+      case SortOption.titleAsc:
+        return '书名（A-Z）';
+      case SortOption.titleDesc:
+        return '书名（Z-A）';
+      case SortOption.authorAsc:
+        return '作者（A-Z）';
+      case SortOption.authorDesc:
+        return '作者（Z-A）';
+      case SortOption.readingProgress:
+        return '阅读进度（已读优先）';
     }
   }
 
@@ -76,9 +207,14 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
       ),
     );
     
-    // 如果从详情页返回并选择打开书籍
-    if (result != null && mounted) {
-      widget.onBookSelected(result);
+    // 无论是否返回结果，都刷新书架（因为可能在详情页删除了书籍）
+    if (mounted) {
+      await _loadBooks();
+      
+      // 如果从详情页返回并选择打开书籍
+      if (result != null) {
+        widget.onBookSelected(result);
+      }
     }
   }
 
@@ -147,6 +283,11 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: _showSortOptions,
+            tooltip: '排序',
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: widget.onAddBook,
             tooltip: '添加书籍',
@@ -158,7 +299,41 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          // 显示当前排序方式
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Row(
+              children: [
+                const Icon(Icons.sort, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  '排序: ${_getSortOptionName(_currentSortOption)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _showSortOptions,
+                  icon: const Icon(Icons.swap_vert, size: 16),
+                  label: const Text('更改'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _buildBody(),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddBook,
         icon: const Icon(Icons.add),
@@ -204,7 +379,7 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
           Icon(
             Icons.menu_book_outlined,
             size: 100,
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 24),
           Text(
@@ -261,7 +436,7 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -332,7 +507,7 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -371,8 +546,8 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.7),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -387,5 +562,18 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
       ),
     );
   }
+}
+
+/// 排序选项枚举
+enum SortOption {
+  addedDateAsc,      // 添加时间（最早）
+  addedDateDesc,     // 添加时间（最新）
+  lastReadDateAsc,   // 阅读时间（最早）
+  lastReadDateDesc,  // 阅读时间（最近）
+  titleAsc,          // 书名（A-Z）
+  titleDesc,         // 书名（Z-A）
+  authorAsc,         // 作者（A-Z）
+  authorDesc,        // 作者（Z-A）
+  readingProgress,   // 阅读进度（已读优先）
 }
 
