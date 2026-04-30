@@ -9,12 +9,14 @@ class BookshelfPage extends StatefulWidget {
   final Function(BookshelfItem) onBookSelected;
   final VoidCallback onAddBook;
   final VoidCallback? onBooksChanged; // 书籍变化时的回调
+  final VoidCallback? onOpenLog; // 打开日志窗口的回调
 
   const BookshelfPage({
     super.key,
     required this.onBookSelected,
     required this.onAddBook,
     this.onBooksChanged,
+    this.onOpenLog,
   });
 
   @override
@@ -287,6 +289,11 @@ class _BookshelfPageState extends State<BookshelfPage> with WidgetsBindingObserv
         title: const Text('我的书架'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: widget.onOpenLog,
+            tooltip: '运行日志',
+          ),
           IconButton(
             icon: const Icon(Icons.sort),
             onPressed: _showSortOptions,

@@ -228,29 +228,23 @@ class _LogViewerPageState extends State<LogViewerPage> {
           Container(
             padding: const EdgeInsets.all(8),
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: FutureBuilder<int>(
-              future: _loggerService.getLogFileSize(),
-              builder: (context, snapshot) {
-                final fileSize = snapshot.data ?? 0;
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '共 ${filteredLogs.length} 条日志',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    Text(
-                      '日志大小: ${_loggerService.formatFileSize(fileSize)} / 10 MB',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: fileSize > 8 * 1024 * 1024
-                            ? Colors.orange
-                            : Colors.grey[700],
-                      ),
-                    ),
-                  ],
-                );
-              },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '共 ${filteredLogs.length} 条日志',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  '内存缓存: ${_loggerService.queueSize} / 10000 条',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _loggerService.queueSize > 9000
+                        ? Colors.orange
+                        : Colors.grey[700],
+                  ),
+                ),
+              ],
             ),
           ),
         ],

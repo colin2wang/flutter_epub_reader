@@ -20,12 +20,14 @@ class EpubViewer extends StatefulWidget {
   final Uint8List epubBytes;
   final String fileName;
   final String? filePath; // 可选的文件路径，用于加入书架
+  final VoidCallback? onOpenLog; // 打开日志窗口的回调
 
   const EpubViewer({
     super.key,
     required this.epubBytes,
     required this.fileName,
     this.filePath,
+    this.onOpenLog,
   });
 
   @override
@@ -155,31 +157,65 @@ class _EpubViewerState extends State<EpubViewer> {
 
   /// 跳转到下一章
   void _nextChapter() {
+    final totalChapters = _flatChapters?.length ?? 0;
+    _logger.debug('📖 尝试翻到下一章: 当前=$_currentChapterIndex, 总数=$totalChapters');
+    
     if (_flatChapters == null || _currentChapterIndex >= _flatChapters!.length - 1) {
+      _logger.debug('⚠️ 已经是最后一章，无法继续翻页');
       return;
     }
     
+    final oldIndex = _currentChapterIndex;
     setState(() => _currentChapterIndex++);
+    
+    final chapter = _flatChapters![_currentChapterIndex].chapter;
+    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
+    final chapterDetails = _getChapterDetails(chapter);
+    _logger.info('➡️ 翻页成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
     _saveSettings();
   }
 
   /// 跳转到上一章
   void _previousChapter() {
+    _logger.debug('📖 尝试翻到上一章: 当前=$_currentChapterIndex');
+    
     if (_currentChapterIndex <= 0) {
+      _logger.debug('⚠️ 已经是第一章，无法继续翻页');
       return;
     }
     
+    final oldIndex = _currentChapterIndex;
     setState(() => _currentChapterIndex--);
+    
+    final chapter = _flatChapters![_currentChapterIndex].chapter;
+    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
+    final chapterDetails = _getChapterDetails(chapter);
+    _logger.info('⬅️ 翻页成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
     _saveSettings();
   }
   
   /// 跳转到指定章节
   void _jumpToChapter(int index) {
-    if (index < 0 || index >= (_flatChapters?.length ?? 0)) {
+    final totalChapters = _flatChapters?.length ?? 0;
+    _logger.debug('📖 尝试跳转到章节: index=$index, 总数=$totalChapters');
+    
+    if (index < 0 || index >= totalChapters) {
+      _logger.warning('⚠️ 章节索引超出范围: $index (有效范围: 0-${totalChapters - 1})');
       return;
     }
     
+    if (index == _currentChapterIndex) {
+      _logger.debug('ℹ️ 已经在目标章节，无需跳转');
+      return;
+    }
+    
+    final oldIndex = _currentChapterIndex;
     setState(() => _currentChapterIndex = index);
+    
+    final chapter = _flatChapters![_currentChapterIndex].chapter;
+    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
+    final chapterDetails = _getChapterDetails(chapter);
+    _logger.info('🎯 跳转成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
     _saveSettings();
   }
 
@@ -403,6 +439,11 @@ class _EpubViewerState extends State<EpubViewer> {
           tooltip: _isInBookshelf ? '从书架移除' : '加入书架',
         ),
         IconButton(
+          icon: const Icon(Icons.bug_report),
+          onPressed: widget.onOpenLog,
+          tooltip: '运行日志',
+        ),
+        IconButton(
           icon: const Icon(Icons.list),
           onPressed: _showChapterList,
           tooltip: '章节列表',
@@ -455,10 +496,16 @@ class _EpubViewerState extends State<EpubViewer> {
     final tapX = details.localPosition.dx;
     final edgeWidth = screenWidth * 0.2;
     
+    _logger.debug('👆 点击事件: x=$tapX, 屏幕宽度=$screenWidth, 边缘宽度=$edgeWidth');
+    
     if (tapX < edgeWidth) {
+      _logger.debug('👈 点击左侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发上一章');
       _previousChapter();
     } else if (tapX > screenWidth - edgeWidth) {
+      _logger.debug('👉 点击右侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发下一章');
       _nextChapter();
+    } else {
+      _logger.debug('👆 点击中间区域，不触发翻页');
     }
   }
   
@@ -467,12 +514,21 @@ class _EpubViewerState extends State<EpubViewer> {
     const double minVelocity = 300;
     final velocity = details.primaryVelocity;
     
-    if (velocity == null) return;
+    if (velocity == null) {
+      _logger.debug('💨 滑动事件: 速度为null，忽略');
+      return;
+    }
+    
+    _logger.debug('💨 滑动事件: 速度=$velocity, 阈值=$minVelocity');
     
     if (velocity < -minVelocity) {
+      _logger.debug('💨 左滑（速度=${velocity.toStringAsFixed(0)}），触发下一章');
       _nextChapter();
     } else if (velocity > minVelocity) {
+      _logger.debug('💨 右滑（速度=${velocity.toStringAsFixed(0)}），触发上一章');
       _previousChapter();
+    } else {
+      _logger.debug('💨 滑动速度不足（|${velocity.toStringAsFixed(0)}| < $minVelocity），忽略');
     }
   }
   
@@ -551,6 +607,44 @@ class _EpubViewerState extends State<EpubViewer> {
       onPrevious: _currentChapterIndex > 0 ? _previousChapter : null,
       onNext: _currentChapterIndex < (_flatChapters?.length ?? 0) - 1 ? _nextChapter : null,
     );
+  }
+  
+  /// 获取章节的 XHTML 文件名
+  String _getXhtmlFileName(EpubChapter chapter) {
+    // 尝试从章节对象中获取文件路径信息
+    try {
+      // 方法1: 尝试访问 Anchor（通常是文件路径）
+      if (chapter.Anchor != null && chapter.Anchor!.isNotEmpty) {
+        final anchor = chapter.Anchor!;
+        // Anchor 格式可能是 "part0000.xhtml#chapter1" 或 "part0000.xhtml"
+        final fileName = anchor.split('#').first.split('/').last.split('\\').last;
+        if (fileName.isNotEmpty) {
+          return fileName;
+        }
+      }
+      
+      // 方法2: 如果以上方法都失败，返回章节标题作为标识
+      final title = chapter.Title ?? '未知章节';
+      return title;
+    } catch (e) {
+      _logger.debug('无法获取 XHTML 文件名: $e');
+      return 'unknown';
+    }
+  }
+  
+  /// 获取章节的详细信息（包括文件分割情况）
+  String _getChapterDetails(EpubChapter chapter) {
+    final xhtmlFile = _getXhtmlFileName(chapter);
+    final contentLength = chapter.HtmlContent?.length ?? 0;
+    
+    // 检查是否有 split 标记（表示是被分割的文件）
+    final isSplit = xhtmlFile.contains('_split_') || xhtmlFile.contains('_part_');
+    
+    if (isSplit) {
+      return '$xhtmlFile (${contentLength} chars, split)';
+    } else {
+      return '$xhtmlFile (${contentLength} chars)';
+    }
   }
 
 

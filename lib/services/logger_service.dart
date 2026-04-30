@@ -30,8 +30,7 @@ class LoggerService {
   factory LoggerService() => _instance;
   LoggerService._internal();
 
-  static const int maxLogSize = 10 * 1024 * 1024; // 10MB
-  static const int maxQueueSize = 500; // FIFO队列最大容量
+  static const int maxQueueSize = 10000; // FIFO队列最大容量
 
   // FIFO队列用于缓存日志
   final Queue<LogEntry> _logQueue = Queue<LogEntry>();
@@ -86,9 +85,6 @@ class LoggerService {
 
       _logFile = File('${logDir.path}/app_log.txt');
       
-      // 检查并清理过大的日志文件
-      await _checkAndCleanLogFile();
-      
       // 配置Logger
       _logger = Logger(
         printer: PrettyPrinter(
@@ -118,21 +114,7 @@ class LoggerService {
     ]);
   }
 
-  /// 检查并清理日志文件
-  Future<void> _checkAndCleanLogFile() async {
-    if (_logFile == null || !await _logFile!.exists()) {
-      return;
-    }
 
-    final fileSize = await _logFile!.length();
-    
-    if (fileSize > maxLogSize) {
-      // 如果文件超过10MB，清空文件并添加标记
-      await _logFile!.writeAsString('[日志文件已清理 - ${DateTime.now().toIso8601String()}]\n');
-      _logQueue.clear();
-      _notifyListeners();
-    }
-  }
 
   /// 添加日志到FIFO队列
   void _addLogToQueue(Level level, String message) {
@@ -189,22 +171,5 @@ class LoggerService {
     _notifyListeners();
   }
 
-  /// 获取日志文件大小
-  Future<int> getLogFileSize() async {
-    if (_logFile == null || !await _logFile!.exists()) {
-      return 0;
-    }
-    return await _logFile!.length();
-  }
 
-  /// 格式化文件大小
-  String formatFileSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    } else {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
-    }
-  }
 }

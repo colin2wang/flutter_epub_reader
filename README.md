@@ -45,9 +45,10 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
 - **Real-time Log Viewer**: Built-in log window displays application runtime logs
 - **Log Filtering**: Filter logs by level (Debug, Info, Warning, Error)
 - **Auto-scroll Control**: Toggle automatic scrolling to follow new logs
-- **FIFO Queue**: Maintains up to 500 most recent log entries in memory
-- **Persistent Storage**: Logs saved to file with 10MB size limit
-- **Easy Access**: Click bug icon in app bar to open log viewer
+- **FIFO Queue**: Maintains up to 10,000 most recent log entries in memory
+- **Persistent Storage**: Logs saved to file for debugging
+- **Easy Access**: Click bug icon 🐛 in app bar from any page to open log viewer
+- **Detailed Page Turn Logging**: Tracks all page turn events with XHTML file information
 
 ### UI/UX Improvements
 - **Safe Area Support**: All pages properly handle notches, status bars, and navigation bars
@@ -113,11 +114,15 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
 
 5. **Reading Operations**
    - **Page Turning Methods**:
-     - Tap left edge of screen (20% area) → Previous chapter
-     - Tap right edge of screen (20% area) → Next chapter
-     - Swipe left → Next chapter
-     - Swipe right → Previous chapter
+     - Tap left edge of screen (20% area) → Previous page
+     - Tap right edge of screen (20% area) → Next page
+     - Swipe left → Next page
+     - Swipe right → Previous page
      - Use bottom navigation bar arrow buttons
+   - **Page Counting**: Pages are counted by actual XHTML/HTML files
+     - Split files (e.g., `part0009_split_000.html`, `part0009_split_001.html`) are counted as separate pages
+     - Bottom navigation shows "Current Page / Total Pages" based on XHTML file count
+     - Example: If a chapter is split into 4 files, it counts as 4 pages
    - **Settings Menu**: Tap the center area of the screen to pop up a centered menu, including:
      - Font size adjustment (12-32)
      - Dark mode toggle
@@ -128,8 +133,8 @@ A fully-featured EPUB e-book reading tool with bookshelf management, code block 
    - **Chapter Navigation**: Click the list icon in the top-right corner or access chapter list from the menu
    - **Exit Full-screen**: Press the back button in full-screen mode to exit first
    - **Bottom Navigation Bar**:
-     - Displays current chapter page number (e.g., 5 / 20)
-     - Provides quick buttons for previous/next chapter
+     - Displays current page number based on XHTML files (e.g., 7 / 10)
+     - Provides quick buttons for previous/next page
      - Usable in full-screen mode
      - Can be shown/hidden via the "Bottom Navigation Bar" option in settings menu
 
@@ -242,15 +247,48 @@ Books are stored in the application documents directory:
 - **Metadata**: Saved in SharedPreferences as JSON
 - **Duplicate Detection**: MD5 hash prevents adding the same book twice
 
+### Page Counting and Navigation
+
+The reader counts pages based on actual XHTML/HTML files in the EPUB:
+- **File-Based Counting**: Each XHTML/HTML file is counted as one page
+- **Split File Support**: When a chapter is split into multiple files (e.g., `part0009_split_000.html`, `part0009_split_001.html`), each file is a separate page
+- **Example**:
+  ```
+  part0005.html          → Page 1
+  part0006.html          → Page 2
+  part0007.html          → Page 3
+  part0008.html          → Page 4
+  part0009_split_000.html → Page 5
+  part0009_split_001.html → Page 6
+  part0009_split_002.html → Page 7
+  part0009_split_003.html → Page 8
+  part0010_split_000.html → Page 9
+  part0010_split_001.html → Page 10
+  ```
+  Total: 10 pages (even though logically there are only 6 chapters)
+- **Bottom Navigation**: Shows "Current Page / Total Pages" (e.g., "5 / 10")
+- **Empty Chapter Filtering**: Chapters without content are automatically filtered out
+- **Smart Detection**: The system detects split files and logs grouping information
+
 ### Logging System
 
 The application uses a structured logging system:
 - **Logger Library**: Uses the `logger` package for formatted output
-- **FIFO Queue**: In-memory queue maintains the 500 most recent log entries
+- **FIFO Queue**: In-memory queue maintains the 10,000 most recent log entries
 - **File Output**: Logs are persisted to `logs/app_log.txt` in the documents directory
-- **Size Management**: Automatic cleanup when log file exceeds 10MB
 - **Multiple Levels**: Supports Debug, Info, Warning, and Error levels
 - **Real-time Display**: Log viewer updates in real-time using listener pattern
+- **Page Turn Tracking**: Detailed logging of all page turn events including:
+  - Current and target page indices
+  - XHTML file names (e.g., `part0009_split_000.html`)
+  - Content length in characters
+  - Split file detection and grouping
+  - Gesture type (tap/swipe) and parameters
+- **EPUB Parsing Details**: Logs show:
+  - Original chapter count from EPUB file
+  - Flattened page count after processing
+  - Split file statistics (number of split files and groups)
+  - Empty chapter filtering results
 
 ### App Configuration
 

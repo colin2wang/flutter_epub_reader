@@ -84,6 +84,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
         builder: (context) => EpubViewer(
           epubBytes: fileBytes,
           fileName: fileName,
+          onOpenLog: _openLogViewer,
         ),
       ),
     );
@@ -102,6 +103,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
             // 例如更新主页面的状态或显示通知
             _loggerService.info('书架数据已更新');
           },
+          onOpenLog: _openLogViewer,
         ),
       ),
     ).then((_) {
@@ -138,6 +140,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
               epubBytes: Uint8List.fromList(fileBytes),
               fileName: book.fileName,
               filePath: book.filePath,
+              onOpenLog: _openLogViewer,
             ),
           ),
         );
@@ -233,6 +236,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
                     epubBytes: fileBytes,
                     fileName: _fileName!,
                     filePath: filePath,
+                    onOpenLog: _openLogViewer,
                   ),
                 ),
               );
@@ -246,6 +250,7 @@ class _EpubHomePageState extends State<EpubHomePage> {
                   epubBytes: fileBytes,
                   fileName: _fileName!,
                   filePath: filePath,
+                  onOpenLog: _openLogViewer,
                 ),
               ),
             );
@@ -351,6 +356,9 @@ class _EpubHomePageState extends State<EpubHomePage> {
       ),
     );
   }
+
+  /// 获取日志服务实例（供其他页面使用）
+  LoggerService get loggerService => _loggerService;
 
   @override
   Widget build(BuildContext context) {
