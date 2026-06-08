@@ -47,3 +47,5 @@ android/
 windows/
 web/
 
+# AI Tools
+.atomcode/

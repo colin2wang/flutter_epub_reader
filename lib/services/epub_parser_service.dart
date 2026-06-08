@@ -125,13 +125,26 @@ class EpubParserService {
       final textContent = _stripHtmlTags(content);
       final hasContent = textContent.trim().isNotEmpty;
       final hasSubChapters = chapter.SubChapters != null && chapter.SubChapters!.isNotEmpty;
-      
+
       // 获取 Anchor 信息用于调试
       final anchor = chapter.Anchor ?? 'N/A';
       final isSplit = anchor.contains('_split_') || anchor.contains('_part_');
-      
+
       _logger.debug('扁平化处理: "${chapter.Title}" - Anchor: $anchor, 原始长度: ${content.length}, 文本长度: ${textContent.length}, 有子章节: $hasSubChapters${isSplit ? " [SPLIT]" : ""}');
-      
+
+      // 检测子章节是否全为分割文件（partXXXX_split_YYY 或 partXXXX_part_YYY）
+      // 这种情况下，父章节的内容与第一个子分割文件的内容重复（epub 标准行为），
+      // 跳过父章节以避免显示重复页面
+      final allSubAreSplits = hasSubChapters && chapter.SubChapters!.every((sub) =>
+          (sub.Anchor?.contains('_split_') ?? false) ||
+          (sub.Anchor?.contains('_part_') ?? false));
+
+      if (allSubAreSplits) {
+        _logger.info('⏭️ 跳过分割父章节 "${chapter.Title}"（${chapter.SubChapters!.length} 个分割子文件），内容与首个子文件重复，只保留子分割文件');
+        _flattenChapters(chapter.SubChapters!, flatList, level: level);
+        continue;
+      }
+
       // 只添加有内容或有子章节的章节
       if (hasContent || hasSubChapters) {
         flatList.add(FlatChapter(
@@ -139,7 +152,7 @@ class EpubParserService {
           index: flatList.length,
           level: level,
         ));
-        
+
         if (!hasContent && hasSubChapters) {
           _logger.debug('✓ 章节 "${chapter.Title}" 无文本内容，但有 ${chapter.SubChapters!.length} 个子章节，保留作为容器');
         } else if (hasContent) {
@@ -149,7 +162,7 @@ class EpubParserService {
       } else {
         _logger.debug('✗ 跳过空章节: "${chapter.Title}" (Anchor: $anchor, 原始长度: ${content.length}, 文本长度: ${textContent.length})');
       }
-      
+
       // 递归处理子章节
       if (hasSubChapters) {
         _flattenChapters(chapter.SubChapters!, flatList, level: level + 1);

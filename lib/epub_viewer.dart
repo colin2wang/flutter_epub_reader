@@ -57,6 +57,9 @@ class _EpubViewerState extends State<EpubViewer> {
   final BookshelfService _bookshelfService = BookshelfService();
   final LoggerService _logger = LoggerService();
   bool _isInBookshelf = false;
+  
+  // 防点击+滑动双重触发：记录最近一次通过点击翻页的时间
+  DateTime? _lastTapTurnTime;
 
   @override
   void initState() {
@@ -477,32 +480,40 @@ class _EpubViewerState extends State<EpubViewer> {
     }
     
     return LayoutBuilder(
-      builder: (context, constraints) => GestureDetector(
-        onTapDown: (details) => _handleTap(details, constraints.maxWidth),
-        onDoubleTap: _toggleMenu,
-        onHorizontalDragEnd: _handleSwipe,
-        child: Stack(
-          children: [
-            _buildReaderContent(),
-            if (_showMenu) _buildSettingsMenu(),
-          ],
+      builder: (context, constraints) => Listener(
+        onPointerDown: (event) {
+          // 使用 Listener 接收原始指针事件，不经过手势竞技场，避免与滑动/双击手势冲突
+          if (!_showMenu) {
+            _handleTap(event.localPosition.dx, constraints.maxWidth);
+          }
+        },
+        child: GestureDetector(
+          onDoubleTap: _toggleMenu,
+          onHorizontalDragEnd: _handleSwipe,
+          child: Stack(
+            children: [
+              _buildReaderContent(),
+              if (_showMenu) _buildSettingsMenu(),
+            ],
+          ),
         ),
       ),
     );
   }
   
   /// 处理点击事件
-  void _handleTap(TapDownDetails details, double screenWidth) {
-    final tapX = details.localPosition.dx;
+  void _handleTap(double tapX, double screenWidth) {
     final edgeWidth = screenWidth * 0.2;
     
     _logger.debug('👆 点击事件: x=$tapX, 屏幕宽度=$screenWidth, 边缘宽度=$edgeWidth');
     
     if (tapX < edgeWidth) {
       _logger.debug('👈 点击左侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发上一章');
+      _lastTapTurnTime = DateTime.now();
       _previousChapter();
     } else if (tapX > screenWidth - edgeWidth) {
       _logger.debug('👉 点击右侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发下一章');
+      _lastTapTurnTime = DateTime.now();
       _nextChapter();
     } else {
       _logger.debug('👆 点击中间区域，不触发翻页');
@@ -511,7 +522,16 @@ class _EpubViewerState extends State<EpubViewer> {
   
   /// 处理滑动手势
   void _handleSwipe(DragEndDetails details) {
-    const double minVelocity = 300;
+    // 如果刚通过点击触发了翻页（300ms内），忽略后续的滑动事件，
+    // 防止点击边缘翻页时手指轻微滑动导致的双重触发
+    if (_lastTapTurnTime != null &&
+        DateTime.now().difference(_lastTapTurnTime!).inMilliseconds < 300) {
+      _logger.debug('💨 忽略滑动: 刚通过点击翻页（${DateTime.now().difference(_lastTapTurnTime!).inMilliseconds}ms前），防止双重触发');
+      _lastTapTurnTime = null;
+      return;
+    }
+
+    const double minVelocity = 200;
     final velocity = details.primaryVelocity;
     
     if (velocity == null) {
