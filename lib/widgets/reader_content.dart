@@ -59,6 +59,10 @@ class ReaderContentState extends State<ReaderContent> {
   int _totalPages = 1;
   bool _ready = false;
   bool _restoringScroll = false;
+  double _lastMaxScrollExtent = -1;
+
+  /// 是否正在等待延迟重新分页（防重复调度）
+  bool _recheckScheduled = false;
 
   int get currentPage => _currentPage;
   int get totalPages => _totalPages;
@@ -72,6 +76,7 @@ class ReaderContentState extends State<ReaderContent> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updatePageInfo();
       _restoreScrollPosition();
+      _scheduleContentRechecks();
     });
   }
 
@@ -79,15 +84,19 @@ class ReaderContentState extends State<ReaderContent> {
   void didUpdateWidget(ReaderContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chapter != widget.chapter) {
-      // 章节变化：新章节的滚动位置由 next/prev 方法恢复
+      // 章节变化：重置高度缓存，重新分页
+      _lastMaxScrollExtent = -1;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updatePageInfo();
         _restoreScrollPosition();
+        _scheduleContentRechecks();
       });
     } else if (oldWidget.fontSize != widget.fontSize) {
       // 字号变化：重新计算页数
+      _lastMaxScrollExtent = -1;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updatePageInfo();
+        _scheduleContentRechecks();
       });
     }
   }
@@ -101,6 +110,14 @@ class ReaderContentState extends State<ReaderContent> {
 
   void _onScroll() {
     if (!_ready || _restoringScroll || !_scrollController.hasClients) return;
+
+    // 检测内容高度变化（图片异步加载后 maxScrollExtent 会增大）
+    final currentMaxScroll = _scrollController.position.maxScrollExtent;
+    if (currentMaxScroll != _lastMaxScrollExtent) {
+      _updatePageInfo();
+      return; // _updatePageInfo 内的 setState 会触发重建，无需继续
+    }
+
     final newPage = (_scrollController.offset / _pageSize).round();
     if (newPage != _currentPage) {
       setState(() {
@@ -118,14 +135,46 @@ class ReaderContentState extends State<ReaderContent> {
     final viewportHeight = _scrollController.position.viewportDimension;
     if (viewportHeight <= 0) return;
 
+    _lastMaxScrollExtent = maxScroll;
     _pageSize = viewportHeight;
-    _totalPages = maxScroll > 0 ? (maxScroll / _pageSize).ceil() + 1 : 1;
-    widget.onTotalPagesChanged?.call(_totalPages);
+    final newTotalPages = maxScroll > 0 ? (maxScroll / _pageSize).ceil() + 1 : 1;
 
-    if (!_restoringScroll) {
-      _currentPage = (_scrollController.offset / _pageSize).round().clamp(0, _totalPages - 1);
+    if (newTotalPages != _totalPages) {
+      _totalPages = newTotalPages;
+      widget.onTotalPagesChanged?.call(_totalPages);
+    }
+
+    final newPage = (_scrollController.offset / _pageSize).round().clamp(0, _totalPages - 1);
+    if (newPage != _currentPage) {
+      setState(() {
+        _currentPage = newPage;
+      });
+    } else if (newTotalPages != _totalPages) {
+      setState(() {});
     }
     _ready = true;
+  }
+
+  /// 在内容渲染后多个时间点重新检测分页，以覆盖图片/字体异步加载的情况
+  void _scheduleContentRechecks() {
+    if (_recheckScheduled) return;
+    _recheckScheduled = true;
+
+    const delays = [200, 500, 1200, 2500]; // 毫秒
+    for (final ms in delays) {
+      Future.delayed(Duration(milliseconds: ms), () {
+        if (!mounted || !_scrollController.hasClients) return;
+        final currentMaxScroll = _scrollController.position.maxScrollExtent;
+        if (currentMaxScroll != _lastMaxScrollExtent) {
+          _updatePageInfo();
+        }
+      });
+    }
+
+    // 所有延迟完成后释放标记
+    Future.delayed(const Duration(milliseconds: 3000), () {
+      _recheckScheduled = false;
+    });
   }
 
   /// 恢复到保存的滚动位置

@@ -572,14 +572,6 @@ class _EpubViewerState extends State<EpubViewer> {
           : Theme.of(context).colorScheme.inversePrimary,
       actions: [
         IconButton(
-          icon: Icon(
-            _isInBookshelf ? Icons.bookmark : Icons.bookmark_border,
-            color: _isInBookshelf ? Colors.amber : null,
-          ),
-          onPressed: _toggleBookshelf,
-          tooltip: _isInBookshelf ? '从书架移除' : '加入书架',
-        ),
-        IconButton(
           icon: const Icon(Icons.bug_report),
           onPressed: widget.onOpenLog,
           tooltip: '运行日志',
@@ -789,15 +781,19 @@ class _EpubViewerState extends State<EpubViewer> {
   Widget _buildBottomNavigationBar() {
     final groups = _chapterGroups;
     final totalGroupCount = groups?.length ?? 0;
+    final currentGroup = groups?[_currentGroupIndex];
+    final groupSubPageCount = currentGroup?.totalPages ?? 1;
     return ReaderNavigationBar(
       currentIndex: _currentGroupIndex,
       totalCount: totalGroupCount,
       currentPage: _currentPage,
       totalPages: _totalPages,
+      subPageIndex: _currentSubPageIndex,
+      subPageCount: groupSubPageCount,
       isDarkMode: _isDarkMode,
       onPrevious: (_currentGroupIndex > 0 || _currentSubPageIndex > 0) ? _previousPage : null,
       onNext: (_currentGroupIndex < totalGroupCount - 1 ||
-               _currentSubPageIndex < (groups?[_currentGroupIndex].totalPages ?? 1) - 1)
+               _currentSubPageIndex < groupSubPageCount - 1)
           ? _nextPage
           : null,
     );

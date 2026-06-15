@@ -7,6 +7,11 @@ class ReaderNavigationBar extends StatelessWidget {
   final int currentPage;
   final int totalPages;
   final bool isDarkMode;
+
+  /// 组内子页面位置（可选，仅当章节有子页面时显示）
+  final int? subPageIndex;
+  final int? subPageCount;
+
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -16,6 +21,8 @@ class ReaderNavigationBar extends StatelessWidget {
     required this.totalCount,
     this.currentPage = 0,
     this.totalPages = 1,
+    this.subPageIndex,
+    this.subPageCount,
     required this.isDarkMode,
     this.onPrevious,
     this.onNext,
@@ -23,6 +30,7 @@ class ReaderNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasSubPages = subPageCount != null && subPageCount! > 1;
     return SafeArea(
       top: false,
       child: Container(
@@ -46,13 +54,22 @@ class ReaderNavigationBar extends StatelessWidget {
                     fontSize: 11,
                   ),
                 ),
-                Text(
-                  '第 ${currentPage + 1} / $totalPages 页',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isDarkMode ? Colors.grey[300] : Colors.black87,
-                    fontWeight: FontWeight.bold,
+                if (hasSubPages)
+                  Text(
+                    '子页 ${(subPageIndex ?? 0) + 1} / $subPageCount  ·  第 ${currentPage + 1} / $totalPages 页',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: isDarkMode ? Colors.grey[300] : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                else
+                  Text(
+                    '第 ${currentPage + 1} / $totalPages 页',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: isDarkMode ? Colors.grey[300] : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
               ],
             ),
             IconButton(

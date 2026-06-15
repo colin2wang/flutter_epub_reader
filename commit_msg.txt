@@ -1,20 +1,19 @@
-fix(reader): group chapter navigation — treat sub-chapters as pages within their parent chapter
+fix(reader): image-load re-pagination, sub-page display, and spine validation
 
-Bug 1: 向下滑动/翻子页面时，章节数不应一起增加
-Bug 2: 有子页面的章节，向右翻页实应进入组内子页面而非跳到下一章
+Three targeted fixes for page numbering accuracy:
 
-Root cause: `_flatChapters` flattened parent+child chapters into a single list,
-and `_currentChapterIndex` indexed into it directly. Every entry was treated as
-a separate "chapter", so navigating to a sub-chapter incremented the chapter
-index.
+1. Image-load re-pagination (reader_content.dart)
+   - Track _lastMaxScrollExtent and detect content height changes
+   - Schedule re-checks at 200/500/1200/2500ms after each content load
+   - Auto-recalculate _totalPages when images finish loading and expand layout
 
-Fix:
-- Introduce `_ChapterGroup` — one top-level chapter + its sub-children form a group.
-- Track `_currentGroupIndex` (which group/top-level chapter) and
-  `_currentSubPageIndex` (which page within the group).
-- Navigation: advance through sub-pages within the group first; only cross
-  groups when the entire group is exhausted.
-- Preserve backward compatibility: saved flat `chapterIndex` is restored via
-  `_restorePositionFromFlatIndex()`.
+2. Sub-page display in navigation bar (reader_navigation_bar.dart)
+   - Add optional subPageIndex/subPageCount parameters
+   - Show "子页 X/Y · 第 A/B 页" when chapter has sub-pages
+   - Show plain "第 A/B 页" when no sub-pages exist
+
+3. Spine order validation logging (epub_parser_service.dart)
+   - Print complete Spine entry list with Anchor + Title at parse time
+   - Enables comparison with Calibre/Sigil to detect ordering mismatches
 
 Co-Authored-By: AtomCode (deepseek-v4-flash) <noreply@atomgit.com>

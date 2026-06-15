@@ -48,9 +48,21 @@ class EpubParserService {
     }
     
     List<EpubChapter> chapters = book.Chapters!;
-    
+
     // 打印章节信息用于调试
     _logger.info('原始章节数: ${chapters.length}');
+
+    // 验证 spine 顺序：打印每个章节的 Anchor（即 spine item href），
+    // 与 Calibre/Sigil 中 content.opf 的 <spine> 条目对比可确认排序是否正确
+    _logger.info('========== Spine 条目列表（阅读顺序） ==========');
+    for (int i = 0; i < chapters.length; i++) {
+      final ch = chapters[i];
+      final anchor = ch.Anchor ?? 'N/A';
+      final title = ch.Title ?? '(无标题)';
+      _logger.info('  Spine[$i]: "$anchor"  ←  $title');
+      _printSubChapters(ch, level: 1);
+    }
+    _logger.info('========== Spine 条目结束 ==========');
     for (int i = 0; i < chapters.length; i++) {
       try {
         final anchor = chapters[i].Anchor ?? 'N/A';
