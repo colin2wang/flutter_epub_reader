@@ -584,7 +584,7 @@ class _EpubViewerState extends State<EpubViewer> {
   Widget _buildReaderContent() {
     final chapter = _flatChapters![_currentChapterIndex].chapter;
     return ReaderContent(
-      key: ValueKey('reader_$_currentChapterIndex'),
+      key: _readerContentKey,
       chapter: chapter,
       fontSize: _fontSize,
       isDarkMode: _isDarkMode,
