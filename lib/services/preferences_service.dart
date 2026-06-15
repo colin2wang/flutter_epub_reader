@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 偏好设置服务 - 管理阅读器的用户偏好
@@ -6,6 +8,7 @@ class PreferencesService {
   static const String _keyDarkMode = 'dark_mode_';
   static const String _keyChapterIndex = 'chapter_index_';
   static const String _keyShowBottomBar = 'show_bottom_bar_';
+  static const String _keyScrollOffsets = 'scroll_offsets_';
   
   SharedPreferences? _prefs;
   
@@ -88,6 +91,29 @@ class PreferencesService {
     await prefs.setInt(_keyChapterIndex + fileKey, chapterIndex);
     if (showBottomBar != null) {
       await prefs.setBool(_keyShowBottomBar + fileKey, showBottomBar);
+    }
+  }
+
+  /// 保存所有章节的滚动偏移
+  Future<void> saveScrollOffsets(String fileName, Map<int, double> offsets) async {
+    if (offsets.isEmpty) return;
+    final String fileKey = _getFileKey(fileName);
+    final jsonString = jsonEncode(
+      offsets.map((k, v) => MapEntry(k.toString(), v)),
+    );
+    await prefs.setString(_keyScrollOffsets + fileKey, jsonString);
+  }
+
+  /// 加载所有章节的滚动偏移
+  Map<int, double> loadScrollOffsets(String fileName) {
+    final String fileKey = _getFileKey(fileName);
+    final jsonString = prefs.getString(_keyScrollOffsets + fileKey);
+    if (jsonString == null || jsonString.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(int.parse(k), (v as num).toDouble()));
+    } catch (e) {
+      return {};
     }
   }
 }

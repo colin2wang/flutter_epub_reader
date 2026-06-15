@@ -1,21 +1,20 @@
-import 'dart:convert';
 import 'package:epubx/epubx.dart' hide Image;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'models/bookshelf_item.dart';
 import 'models/flat_chapter.dart';
 import 'services/bookshelf_service.dart';
 import 'services/epub_parser_service.dart';
 import 'services/logger_service.dart';
 import 'services/preferences_service.dart';
 import 'services/search_service.dart';
+import 'widgets/chapter_list_panel.dart';
 import 'widgets/reader_content.dart';
 import 'widgets/reader_navigation_bar.dart';
-import 'widgets/chapter_list_panel.dart';
-import 'widgets/search_result_panel.dart';
 import 'widgets/reader_settings_menu.dart';
+import 'widgets/search_result_panel.dart';
 
+/// EPUB 阅读器主页面
 class EpubViewer extends StatefulWidget {
   final Uint8List epubBytes;
   final String fileName;
@@ -38,41 +37,51 @@ class _EpubViewerState extends State<EpubViewer> {
   // EPUB 数据
   List<FlatChapter>? _flatChapters;
   EpubBook? _epubBook;
-  
+
   // 阅读状态
   int _currentChapterIndex = 0;
   bool _isLoading = true;
   String? _error;
-  
+
   // UI 状态
   bool _isFullScreen = false;
   bool _showMenu = false;
   double _fontSize = 16.0;
   bool _isDarkMode = false;
   bool _showBottomBar = true;
-  
+
   // 控制器和服务
   final TextEditingController _searchController = TextEditingController();
   final PreferencesService _preferencesService = PreferencesService();
   final BookshelfService _bookshelfService = BookshelfService();
   final LoggerService _logger = LoggerService();
   bool _isInBookshelf = false;
-  
+
   // 防点击+滑动双重触发：记录最近一次通过点击翻页的时间
   DateTime? _lastTapTurnTime;
+
+  // ReaderContent 的 GlobalKey，用于调用翻页方法
+  final GlobalKey<ReaderContentState> _readerContentKey = GlobalKey<ReaderContentState>();
+
+  // 每章滚动位置缓存（章节索引 → 滚动偏移）
+  final Map<int, double> _chapterScrollOffsets = {};
+
+  // 当前章节的页信息
+  int _currentPage = 0;
+  int _totalPages = 1;
 
   @override
   void initState() {
     super.initState();
     _initializePreferences();
   }
-  
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   /// 初始化偏好设置
   Future<void> _initializePreferences() async {
     await _preferencesService.initialize();
@@ -81,14 +90,14 @@ class _EpubViewerState extends State<EpubViewer> {
     _checkIfInBookshelf();
     await _loadEpub();
   }
-  
+
   /// 检查书籍是否已在书架中
   void _checkIfInBookshelf() {
     setState(() {
       _isInBookshelf = _bookshelfService.isBookInShelf(widget.fileName);
     });
   }
-  
+
   /// 加载保存的设置
   void _loadSettings() {
     setState(() {
@@ -96,10 +105,11 @@ class _EpubViewerState extends State<EpubViewer> {
       _isDarkMode = _preferencesService.loadDarkMode(widget.fileName);
       _currentChapterIndex = _preferencesService.loadChapterIndex(widget.fileName);
       _showBottomBar = _preferencesService.loadShowBottomBar(widget.fileName);
+      _chapterScrollOffsets.addAll(_preferencesService.loadScrollOffsets(widget.fileName));
     });
   }
-  
-  /// 保存当前设置
+
+  /// 保存所有设置
   Future<void> _saveSettings() async {
     await _preferencesService.saveAllSettings(
       widget.fileName,
@@ -108,6 +118,8 @@ class _EpubViewerState extends State<EpubViewer> {
       chapterIndex: _currentChapterIndex,
       showBottomBar: _showBottomBar,
     );
+    // 持久化滚动位置
+    await _preferencesService.saveScrollOffsets(widget.fileName, _chapterScrollOffsets);
   }
 
   /// 加载 EPUB 文件
@@ -117,9 +129,9 @@ class _EpubViewerState extends State<EpubViewer> {
         _isLoading = true;
         _error = null;
       });
-      
+
       final result = await EpubParserService.parseEpub(widget.epubBytes);
-      
+
       if (mounted) {
         setState(() {
           _epubBook = result['book'] as EpubBook;
@@ -132,19 +144,19 @@ class _EpubViewerState extends State<EpubViewer> {
       _handleLoadError(e, stackTrace);
     }
   }
-  
+
   /// 验证章节索引是否有效
   void _validateChapterIndex() {
     if (_flatChapters != null && _currentChapterIndex >= _flatChapters!.length) {
       _currentChapterIndex = 0;
     }
   }
-  
+
   /// 处理加载错误
   void _handleLoadError(dynamic error, StackTrace stackTrace) {
     _logger.error('解析 EPUB 失败: $error');
     _logger.error('堆栈跟踪: $stackTrace');
-    
+
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -162,59 +174,68 @@ class _EpubViewerState extends State<EpubViewer> {
   void _nextChapter() {
     final totalChapters = _flatChapters?.length ?? 0;
     _logger.debug('📖 尝试翻到下一章: 当前=$_currentChapterIndex, 总数=$totalChapters');
-    
+
     if (_flatChapters == null || _currentChapterIndex >= _flatChapters!.length - 1) {
       _logger.debug('⚠️ 已经是最后一章，无法继续翻页');
       return;
     }
-    
+
     final oldIndex = _currentChapterIndex;
-    setState(() => _currentChapterIndex++);
-    
+    setState(() {
+      _currentChapterIndex++;
+      _currentPage = 0;
+    });
+
     final chapter = _flatChapters![_currentChapterIndex].chapter;
     final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
     final chapterDetails = _getChapterDetails(chapter);
-    _logger.info('➡️ 翻页成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
+    _logger.info('➡️ 跨章翻页: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
     _saveSettings();
   }
 
   /// 跳转到上一章
   void _previousChapter() {
     _logger.debug('📖 尝试翻到上一章: 当前=$_currentChapterIndex');
-    
+
     if (_currentChapterIndex <= 0) {
       _logger.debug('⚠️ 已经是第一章，无法继续翻页');
       return;
     }
-    
+
     final oldIndex = _currentChapterIndex;
-    setState(() => _currentChapterIndex--);
-    
+    setState(() {
+      _currentChapterIndex--;
+      _currentPage = 0;
+    });
+
     final chapter = _flatChapters![_currentChapterIndex].chapter;
     final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
     final chapterDetails = _getChapterDetails(chapter);
-    _logger.info('⬅️ 翻页成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
+    _logger.info('⬅️ 跨章翻页: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
     _saveSettings();
   }
-  
+
   /// 跳转到指定章节
   void _jumpToChapter(int index) {
     final totalChapters = _flatChapters?.length ?? 0;
     _logger.debug('📖 尝试跳转到章节: index=$index, 总数=$totalChapters');
-    
+
     if (index < 0 || index >= totalChapters) {
       _logger.warning('⚠️ 章节索引超出范围: $index (有效范围: 0-${totalChapters - 1})');
       return;
     }
-    
+
     if (index == _currentChapterIndex) {
       _logger.debug('ℹ️ 已经在目标章节，无需跳转');
       return;
     }
-    
+
     final oldIndex = _currentChapterIndex;
-    setState(() => _currentChapterIndex = index);
-    
+    setState(() {
+      _currentChapterIndex = index;
+      _currentPage = 0;
+    });
+
     final chapter = _flatChapters![_currentChapterIndex].chapter;
     final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
     final chapterDetails = _getChapterDetails(chapter);
@@ -225,7 +246,7 @@ class _EpubViewerState extends State<EpubViewer> {
   /// 切换全屏模式
   void _toggleFullScreen() {
     setState(() => _isFullScreen = !_isFullScreen);
-    
+
     SystemChrome.setEnabledSystemUIMode(
       _isFullScreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
@@ -259,9 +280,9 @@ class _EpubViewerState extends State<EpubViewer> {
         final book = _bookshelfService.getAllBooks().firstWhere(
           (b) => b.fileName == widget.fileName,
         );
-        
+
         final success = await _bookshelfService.removeBook(book.id);
-        
+
         if (mounted) {
           setState(() => _isInBookshelf = false);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -280,7 +301,7 @@ class _EpubViewerState extends State<EpubViewer> {
       if (widget.filePath != null && widget.filePath!.isNotEmpty) {
         try {
           final book = await _bookshelfService.addBook(widget.fileName, widget.filePath!);
-          
+
           if (mounted) {
             if (book != null) {
               setState(() => _isInBookshelf = true);
@@ -309,7 +330,7 @@ class _EpubViewerState extends State<EpubViewer> {
               title: const Text('添加到书架'),
               content: const Text(
                 '当前打开的文件无法直接添加到书架。\n\n'
-                '请返回主页，重新选择文件并点击“添加到书架”。',
+                '请返回主页，重新选择文件并点击"添加到书架"。',
               ),
               actions: [
                 TextButton(
@@ -400,8 +421,13 @@ class _EpubViewerState extends State<EpubViewer> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleWillPop,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isFullScreen) {
+          _toggleFullScreen();
+        }
+      },
       child: Theme(
         data: _isDarkMode ? ThemeData.dark() : ThemeData.light(),
         child: Scaffold(
@@ -412,16 +438,7 @@ class _EpubViewerState extends State<EpubViewer> {
       ),
     );
   }
-  
-  /// 处理返回按钮
-  Future<bool> _handleWillPop() async {
-    if (_isFullScreen) {
-      _toggleFullScreen();
-      return false;
-    }
-    return true;
-  }
-  
+
   /// 构建应用栏
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
@@ -429,8 +446,8 @@ class _EpubViewerState extends State<EpubViewer> {
         widget.fileName,
         style: const TextStyle(fontSize: 16),
       ),
-      backgroundColor: _isDarkMode 
-          ? Colors.grey[900] 
+      backgroundColor: _isDarkMode
+          ? Colors.grey[900]
           : Theme.of(context).colorScheme.inversePrimary,
       actions: [
         IconButton(
@@ -459,13 +476,13 @@ class _EpubViewerState extends State<EpubViewer> {
       ],
     );
   }
-  
+
   /// 构建主体内容
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (_error != null) {
       return Center(
         child: Padding(
@@ -478,7 +495,7 @@ class _EpubViewerState extends State<EpubViewer> {
         ),
       );
     }
-    
+
     return LayoutBuilder(
       builder: (context, constraints) => Listener(
         onPointerDown: (event) {
@@ -500,30 +517,41 @@ class _EpubViewerState extends State<EpubViewer> {
       ),
     );
   }
-  
-  /// 处理点击事件
+
+  /// 处理点击事件 - 按视口分页
   void _handleTap(double tapX, double screenWidth) {
     final edgeWidth = screenWidth * 0.2;
-    
+
     _logger.debug('👆 点击事件: x=$tapX, 屏幕宽度=$screenWidth, 边缘宽度=$edgeWidth');
-    
+
     if (tapX < edgeWidth) {
-      _logger.debug('👈 点击左侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发上一章');
+      // 左侧点击：上一页（章节内）
+      _logger.debug('👈 点击左侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发上一页');
       _lastTapTurnTime = DateTime.now();
-      _previousChapter();
+
+      final readerState = _readerContentKey.currentState;
+      if (readerState != null && !readerState.goToPrevPage()) {
+        // 已到章节开头，跨章到上一章
+        _previousChapter();
+      }
     } else if (tapX > screenWidth - edgeWidth) {
-      _logger.debug('👉 点击右侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发下一章');
+      // 右侧点击：下一页（章节内）
+      _logger.debug('👉 点击右侧区域 (${(tapX/screenWidth*100).toStringAsFixed(1)}%)，触发下一页');
       _lastTapTurnTime = DateTime.now();
-      _nextChapter();
+
+      final readerState = _readerContentKey.currentState;
+      if (readerState != null && !readerState.goToNextPage()) {
+        // 已到章节末尾，跨章到下一章
+        _nextChapter();
+      }
     } else {
       _logger.debug('👆 点击中间区域，不触发翻页');
     }
   }
-  
-  /// 处理滑动手势
+
+  /// 处理滑动手势 - 保持跨章翻页
   void _handleSwipe(DragEndDetails details) {
-    // 如果刚通过点击触发了翻页（300ms内），忽略后续的滑动事件，
-    // 防止点击边缘翻页时手指轻微滑动导致的双重触发
+    // 如果刚通过点击触发了翻页（300ms内），忽略后续的滑动事件
     if (_lastTapTurnTime != null &&
         DateTime.now().difference(_lastTapTurnTime!).inMilliseconds < 300) {
       _logger.debug('💨 忽略滑动: 刚通过点击翻页（${DateTime.now().difference(_lastTapTurnTime!).inMilliseconds}ms前），防止双重触发');
@@ -533,14 +561,14 @@ class _EpubViewerState extends State<EpubViewer> {
 
     const double minVelocity = 200;
     final velocity = details.primaryVelocity;
-    
+
     if (velocity == null) {
       _logger.debug('💨 滑动事件: 速度为null，忽略');
       return;
     }
-    
+
     _logger.debug('💨 滑动事件: 速度=$velocity, 阈值=$minVelocity');
-    
+
     if (velocity < -minVelocity) {
       _logger.debug('💨 左滑（速度=${velocity.toStringAsFixed(0)}），触发下一章');
       _nextChapter();
@@ -551,17 +579,35 @@ class _EpubViewerState extends State<EpubViewer> {
       _logger.debug('💨 滑动速度不足（|${velocity.toStringAsFixed(0)}| < $minVelocity），忽略');
     }
   }
-  
+
   /// 构建阅读器内容
   Widget _buildReaderContent() {
+    final chapter = _flatChapters![_currentChapterIndex].chapter;
     return ReaderContent(
-      chapter: _flatChapters![_currentChapterIndex].chapter,
+      key: ValueKey('reader_$_currentChapterIndex'),
+      chapter: chapter,
       fontSize: _fontSize,
       isDarkMode: _isDarkMode,
       epubBook: _epubBook,
+      initialScrollOffset: _chapterScrollOffsets[_currentChapterIndex] ?? 0,
+      onPageChanged: (page) {
+        setState(() {
+          _currentPage = page;
+        });
+      },
+      onScrollOffsetChanged: (offset) {
+        _chapterScrollOffsets[_currentChapterIndex] = offset;
+      },
+      onReachedChapterEnd: _nextChapter,
+      onReachedChapterStart: _previousChapter,
+      onTotalPagesChanged: (totalPages) {
+        setState(() {
+          _totalPages = totalPages;
+        });
+      },
     );
   }
-  
+
   /// 构建设置菜单
   Widget _buildSettingsMenu() {
     return Positioned.fill(
@@ -617,18 +663,20 @@ class _EpubViewerState extends State<EpubViewer> {
       ),
     );
   }
-  
+
   /// 构建底部导航栏
   Widget _buildBottomNavigationBar() {
     return ReaderNavigationBar(
       currentIndex: _currentChapterIndex,
       totalCount: _flatChapters?.length ?? 0,
+      currentPage: _currentPage,
+      totalPages: _totalPages,
       isDarkMode: _isDarkMode,
       onPrevious: _currentChapterIndex > 0 ? _previousChapter : null,
       onNext: _currentChapterIndex < (_flatChapters?.length ?? 0) - 1 ? _nextChapter : null,
     );
   }
-  
+
   /// 获取章节的 XHTML 文件名
   String _getXhtmlFileName(EpubChapter chapter) {
     // 尝试从章节对象中获取文件路径信息
@@ -642,7 +690,7 @@ class _EpubViewerState extends State<EpubViewer> {
           return fileName;
         }
       }
-      
+
       // 方法2: 如果以上方法都失败，返回章节标题作为标识
       final title = chapter.Title ?? '未知章节';
       return title;
@@ -651,21 +699,19 @@ class _EpubViewerState extends State<EpubViewer> {
       return 'unknown';
     }
   }
-  
+
   /// 获取章节的详细信息（包括文件分割情况）
   String _getChapterDetails(EpubChapter chapter) {
     final xhtmlFile = _getXhtmlFileName(chapter);
     final contentLength = chapter.HtmlContent?.length ?? 0;
-    
+
     // 检查是否有 split 标记（表示是被分割的文件）
     final isSplit = xhtmlFile.contains('_split_') || xhtmlFile.contains('_part_');
-    
+
     if (isSplit) {
       return '$xhtmlFile (${contentLength} chars, split)';
     } else {
       return '$xhtmlFile (${contentLength} chars)';
     }
   }
-
-
 }
