@@ -33,13 +33,37 @@ class EpubViewer extends StatefulWidget {
   State<EpubViewer> createState() => _EpubViewerState();
 }
 
+/// 逻辑章节分组 —— 一个顶级章节及其所有子章节构成一组
+class _ChapterGroup {
+  final FlatChapter topLevelChapter;
+  final List<FlatChapter> subChapters;
+
+  _ChapterGroup({
+    required this.topLevelChapter,
+    required this.subChapters,
+  });
+
+  /// 总页数 = 主章节 + 子章节数
+  int get totalPages => 1 + subChapters.length;
+
+  /// 获取组内指定偏移的 FlatChapter（0 = 主章节，1+ = 子章节）
+  FlatChapter flatChapterAt(int subPageIndex) {
+    if (subPageIndex <= 0) return topLevelChapter;
+    return subChapters[subPageIndex - 1];
+  }
+}
+
 class _EpubViewerState extends State<EpubViewer> {
   // EPUB 数据
   List<FlatChapter>? _flatChapters;
   EpubBook? _epubBook;
 
-  // 阅读状态
-  int _currentChapterIndex = 0;
+  // 逻辑章节分组
+  List<_ChapterGroup>? _chapterGroups;
+
+  // 阅读状态：逻辑组索引 + 组内页面偏移（0=主章节，1+=子章节）
+  int _currentGroupIndex = 0;
+  int _currentSubPageIndex = 0;
   bool _isLoading = true;
   String? _error;
 
@@ -63,12 +87,67 @@ class _EpubViewerState extends State<EpubViewer> {
   // ReaderContent 的 GlobalKey，用于调用翻页方法
   final GlobalKey<ReaderContentState> _readerContentKey = GlobalKey<ReaderContentState>();
 
-  // 每章滚动位置缓存（章节索引 → 滚动偏移）
+  // 每章滚动位置缓存（FlatChapter.index → 滚动偏移）
   final Map<int, double> _chapterScrollOffsets = {};
 
   // 当前章节的页信息
   int _currentPage = 0;
   int _totalPages = 1;
+
+  /// 从扁平章节列表构建逻辑分组
+  static List<_ChapterGroup> _buildGroups(List<FlatChapter> flatChapters) {
+    final groups = <_ChapterGroup>[];
+    int i = 0;
+    while (i < flatChapters.length) {
+      final subs = <FlatChapter>[];
+      int j = i + 1;
+      while (j < flatChapters.length && flatChapters[j].level > 0) {
+        subs.add(flatChapters[j]);
+        j++;
+      }
+      groups.add(_ChapterGroup(
+        topLevelChapter: flatChapters[i],
+        subChapters: subs,
+      ));
+      i = j;
+    }
+    return groups;
+  }
+
+  /// 获取当前正在显示的 FlatChapter
+  FlatChapter _getCurrentFlatChapter() {
+    final group = _chapterGroups![_currentGroupIndex];
+    return group.flatChapterAt(_currentSubPageIndex);
+  }
+
+  /// 获取当前 FlatChapter 在扁平列表中的索引（用于持久化/缓存）
+  int _getCurrentFlatIndex() {
+    return _getCurrentFlatChapter().index;
+  }
+
+  /// 从保存的扁平索引恢复分组位置
+  void _restorePositionFromFlatIndex(int flatIndex) {
+    final groups = _chapterGroups;
+    if (groups == null || groups.isEmpty) return;
+    for (int g = 0; g < groups.length; g++) {
+      final group = groups[g];
+      if (group.topLevelChapter.index == flatIndex) {
+        _currentGroupIndex = g;
+        _currentSubPageIndex = 0;
+        return;
+      }
+      for (int s = 0; s < group.subChapters.length; s++) {
+        if (group.subChapters[s].index == flatIndex) {
+          _currentGroupIndex = g;
+          _currentSubPageIndex = s + 1;
+          return;
+        }
+      }
+    }
+    // 未找到则重置
+    _currentGroupIndex = 0;
+    _currentSubPageIndex = 0;
+  }
 
   @override
   void initState() {
@@ -103,7 +182,7 @@ class _EpubViewerState extends State<EpubViewer> {
     setState(() {
       _fontSize = _preferencesService.loadFontSize(widget.fileName);
       _isDarkMode = _preferencesService.loadDarkMode(widget.fileName);
-      _currentChapterIndex = _preferencesService.loadChapterIndex(widget.fileName);
+      _currentGroupIndex = _preferencesService.loadChapterIndex(widget.fileName);
       _showBottomBar = _preferencesService.loadShowBottomBar(widget.fileName);
       _chapterScrollOffsets.addAll(_preferencesService.loadScrollOffsets(widget.fileName));
     });
@@ -115,7 +194,7 @@ class _EpubViewerState extends State<EpubViewer> {
       widget.fileName,
       fontSize: _fontSize,
       isDarkMode: _isDarkMode,
-      chapterIndex: _currentChapterIndex,
+      chapterIndex: _currentGroupIndex,
       showBottomBar: _showBottomBar,
     );
     // 持久化滚动位置
@@ -136,19 +215,15 @@ class _EpubViewerState extends State<EpubViewer> {
         setState(() {
           _epubBook = result['book'] as EpubBook;
           _flatChapters = result['flatChapters'] as List<FlatChapter>;
-          _validateChapterIndex();
+          _chapterGroups = _buildGroups(_flatChapters!);
+          // 从保存的扁平索引恢复分组位置（兼容旧版保存的 _currentChapterIndex）
+          final savedFlatIndex = _currentGroupIndex;
+          _restorePositionFromFlatIndex(savedFlatIndex);
           _isLoading = false;
         });
       }
     } catch (e, stackTrace) {
       _handleLoadError(e, stackTrace);
-    }
-  }
-
-  /// 验证章节索引是否有效
-  void _validateChapterIndex() {
-    if (_flatChapters != null && _currentChapterIndex >= _flatChapters!.length) {
-      _currentChapterIndex = 0;
     }
   }
 
@@ -170,77 +245,123 @@ class _EpubViewerState extends State<EpubViewer> {
     }
   }
 
-  /// 跳转到下一章
-  void _nextChapter() {
-    final totalChapters = _flatChapters?.length ?? 0;
-    _logger.debug('📖 尝试翻到下一章: 当前=$_currentChapterIndex, 总数=$totalChapters');
+  /// 向前翻一页（组内子页面优先，耗尽后进入下一组）
+  void _nextPage() {
+    final groups = _chapterGroups;
+    if (groups == null || groups.isEmpty) return;
 
-    if (_flatChapters == null || _currentChapterIndex >= _flatChapters!.length - 1) {
-      _logger.debug('⚠️ 已经是最后一章，无法继续翻页');
+    final group = groups[_currentGroupIndex];
+
+    // 组内还有子页面 → 前进到子页面
+    if (_currentSubPageIndex + 1 < group.totalPages) {
+      final oldSub = _currentSubPageIndex;
+      setState(() {
+        _currentSubPageIndex++;
+        _currentPage = 0;
+      });
+      final chapter = _getCurrentFlatChapter().chapter;
+      _logger.info('➡️ 组内翻页: 组[$_currentGroupIndex] 子页[$oldSub] -> [$_currentSubPageIndex] "${chapter.Title}"');
+      _saveSettings();
       return;
     }
 
-    final oldIndex = _currentChapterIndex;
+    // 组内已翻完 → 进入下一组
+    if (_currentGroupIndex >= groups.length - 1) {
+      _logger.debug('⚠️ 已经是最后一组，无法继续翻页');
+      return;
+    }
+
+    final oldGroup = _currentGroupIndex;
     setState(() {
-      _currentChapterIndex++;
+      _currentGroupIndex++;
+      _currentSubPageIndex = 0;
       _currentPage = 0;
     });
-
-    final chapter = _flatChapters![_currentChapterIndex].chapter;
-    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
-    final chapterDetails = _getChapterDetails(chapter);
-    _logger.info('➡️ 跨章翻页: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
+    final chapter = _getCurrentFlatChapter().chapter;
+    final chapterTitle = chapter.Title ?? '第${_currentGroupIndex + 1}章';
+    _logger.info('➡️ 进入下一组: [$oldGroup] -> [$_currentGroupIndex] "$chapterTitle"');
     _saveSettings();
   }
 
-  /// 跳转到上一章
-  void _previousChapter() {
-    _logger.debug('📖 尝试翻到上一章: 当前=$_currentChapterIndex');
+  /// 向后翻一页（组内回退，回退到头则进入上一组）
+  void _previousPage() {
+    final groups = _chapterGroups;
+    if (groups == null || groups.isEmpty) return;
 
-    if (_currentChapterIndex <= 0) {
-      _logger.debug('⚠️ 已经是第一章，无法继续翻页');
+    // 组内还有前一个子页面 → 回退
+    if (_currentSubPageIndex > 0) {
+      final oldSub = _currentSubPageIndex;
+      setState(() {
+        _currentSubPageIndex--;
+        _currentPage = 0;
+      });
+      final chapter = _getCurrentFlatChapter().chapter;
+      _logger.info('⬅️ 组内回退: 组[$_currentGroupIndex] 子页[$oldSub] -> [$_currentSubPageIndex] "${chapter.Title}"');
+      _saveSettings();
       return;
     }
 
-    final oldIndex = _currentChapterIndex;
+    // 组内已到开头 → 进入上一组
+    if (_currentGroupIndex <= 0) {
+      _logger.debug('⚠️ 已经是第一组，无法继续回退');
+      return;
+    }
+
+    final oldGroup = _currentGroupIndex;
     setState(() {
-      _currentChapterIndex--;
+      _currentGroupIndex--;
+      _currentSubPageIndex = groups[_currentGroupIndex].totalPages - 1;
       _currentPage = 0;
     });
-
-    final chapter = _flatChapters![_currentChapterIndex].chapter;
-    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
-    final chapterDetails = _getChapterDetails(chapter);
-    _logger.info('⬅️ 跨章翻页: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
+    final chapter = _getCurrentFlatChapter().chapter;
+    final chapterTitle = chapter.Title ?? '第${_currentGroupIndex + 1}章';
+    _logger.info('⬅️ 回到上一组: [$oldGroup] -> [$_currentGroupIndex] "$chapterTitle"');
     _saveSettings();
   }
 
-  /// 跳转到指定章节
-  void _jumpToChapter(int index) {
-    final totalChapters = _flatChapters?.length ?? 0;
-    _logger.debug('📖 尝试跳转到章节: index=$index, 总数=$totalChapters');
+  /// 跳转到指定章节（根据 FlatChapter.index 找到对应组+子页）
+  void _jumpToChapter(int flatIndex) {
+    final groups = _chapterGroups;
+    if (groups == null || groups.isEmpty) return;
 
-    if (index < 0 || index >= totalChapters) {
-      _logger.warning('⚠️ 章节索引超出范围: $index (有效范围: 0-${totalChapters - 1})');
-      return;
+    for (int g = 0; g < groups.length; g++) {
+      final group = groups[g];
+      if (group.topLevelChapter.index == flatIndex) {
+        if (g == _currentGroupIndex && _currentSubPageIndex == 0) {
+          _logger.debug('ℹ️ 已经在目标章节，无需跳转');
+          return;
+        }
+        final oldGroup = _currentGroupIndex;
+        setState(() {
+          _currentGroupIndex = g;
+          _currentSubPageIndex = 0;
+          _currentPage = 0;
+        });
+        final title = group.topLevelChapter.chapter.Title ?? '第${g + 1}章';
+        _logger.info('🎯 跳转成功: [$oldGroup] -> [$g] "$title"');
+        _saveSettings();
+        return;
+      }
+      for (int s = 0; s < group.subChapters.length; s++) {
+        if (group.subChapters[s].index == flatIndex) {
+          if (g == _currentGroupIndex && _currentSubPageIndex == s + 1) {
+            _logger.debug('ℹ️ 已经在目标子页面，无需跳转');
+            return;
+          }
+          final oldGroup = _currentGroupIndex;
+          setState(() {
+            _currentGroupIndex = g;
+            _currentSubPageIndex = s + 1;
+            _currentPage = 0;
+          });
+          final title = group.subChapters[s].chapter.Title ?? '子页${s + 1}';
+          _logger.info('🎯 跳转到子页: [$oldGroup] -> [$g] "$title"');
+          _saveSettings();
+          return;
+        }
+      }
     }
-
-    if (index == _currentChapterIndex) {
-      _logger.debug('ℹ️ 已经在目标章节，无需跳转');
-      return;
-    }
-
-    final oldIndex = _currentChapterIndex;
-    setState(() {
-      _currentChapterIndex = index;
-      _currentPage = 0;
-    });
-
-    final chapter = _flatChapters![_currentChapterIndex].chapter;
-    final chapterTitle = chapter.Title ?? '第${_currentChapterIndex + 1}章';
-    final chapterDetails = _getChapterDetails(chapter);
-    _logger.info('🎯 跳转成功: [$oldIndex] -> [$_currentChapterIndex] "$chapterTitle" | $chapterDetails');
-    _saveSettings();
+    _logger.warning('⚠️ 未找到 flatIndex=$flatIndex，无法跳转');
   }
 
   /// 切换全屏模式
@@ -413,7 +534,7 @@ class _EpubViewerState extends State<EpubViewer> {
       context: context,
       builder: (context) => ChapterListPanel(
         flatChapters: _flatChapters!,
-        currentChapterIndex: _currentChapterIndex,
+        currentChapterIndex: _getCurrentFlatIndex(),
         onChapterSelected: _jumpToChapter,
       ),
     );
@@ -531,8 +652,8 @@ class _EpubViewerState extends State<EpubViewer> {
 
       final readerState = _readerContentKey.currentState;
       if (readerState != null && !readerState.goToPrevPage()) {
-        // 已到章节开头，跨章到上一章
-        _previousChapter();
+        // 已到章节开头，跨到上一页（可能是回退到上一组或组内回退）
+        _previousPage();
       }
     } else if (tapX > screenWidth - edgeWidth) {
       // 右侧点击：下一页（章节内）
@@ -541,8 +662,8 @@ class _EpubViewerState extends State<EpubViewer> {
 
       final readerState = _readerContentKey.currentState;
       if (readerState != null && !readerState.goToNextPage()) {
-        // 已到章节末尾，跨章到下一章
-        _nextChapter();
+        // 已到章节末尾，跨到下一页（可能是下一组或组内子页面）
+        _nextPage();
       }
     } else {
       _logger.debug('👆 点击中间区域，不触发翻页');
@@ -570,11 +691,11 @@ class _EpubViewerState extends State<EpubViewer> {
     _logger.debug('💨 滑动事件: 速度=$velocity, 阈值=$minVelocity');
 
     if (velocity < -minVelocity) {
-      _logger.debug('💨 左滑（速度=${velocity.toStringAsFixed(0)}），触发下一章');
-      _nextChapter();
+      _logger.debug('💨 左滑（速度=${velocity.toStringAsFixed(0)}），触发下一页');
+      _nextPage();
     } else if (velocity > minVelocity) {
-      _logger.debug('💨 右滑（速度=${velocity.toStringAsFixed(0)}），触发上一章');
-      _previousChapter();
+      _logger.debug('💨 右滑（速度=${velocity.toStringAsFixed(0)}），触发上一页');
+      _previousPage();
     } else {
       _logger.debug('💨 滑动速度不足（|${velocity.toStringAsFixed(0)}| < $minVelocity），忽略');
     }
@@ -582,24 +703,24 @@ class _EpubViewerState extends State<EpubViewer> {
 
   /// 构建阅读器内容
   Widget _buildReaderContent() {
-    final chapter = _flatChapters![_currentChapterIndex].chapter;
+    final flatChapter = _getCurrentFlatChapter();
     return ReaderContent(
       key: _readerContentKey,
-      chapter: chapter,
+      chapter: flatChapter.chapter,
       fontSize: _fontSize,
       isDarkMode: _isDarkMode,
       epubBook: _epubBook,
-      initialScrollOffset: _chapterScrollOffsets[_currentChapterIndex] ?? 0,
+      initialScrollOffset: _chapterScrollOffsets[flatChapter.index] ?? 0,
       onPageChanged: (page) {
         setState(() {
           _currentPage = page;
         });
       },
       onScrollOffsetChanged: (offset) {
-        _chapterScrollOffsets[_currentChapterIndex] = offset;
+        _chapterScrollOffsets[flatChapter.index] = offset;
       },
-      onReachedChapterEnd: _nextChapter,
-      onReachedChapterStart: _previousChapter,
+      onReachedChapterEnd: _nextPage,
+      onReachedChapterStart: _previousPage,
       onTotalPagesChanged: (totalPages) {
         setState(() {
           _totalPages = totalPages;
@@ -666,52 +787,20 @@ class _EpubViewerState extends State<EpubViewer> {
 
   /// 构建底部导航栏
   Widget _buildBottomNavigationBar() {
+    final groups = _chapterGroups;
+    final totalGroupCount = groups?.length ?? 0;
     return ReaderNavigationBar(
-      currentIndex: _currentChapterIndex,
-      totalCount: _flatChapters?.length ?? 0,
+      currentIndex: _currentGroupIndex,
+      totalCount: totalGroupCount,
       currentPage: _currentPage,
       totalPages: _totalPages,
       isDarkMode: _isDarkMode,
-      onPrevious: _currentChapterIndex > 0 ? _previousChapter : null,
-      onNext: _currentChapterIndex < (_flatChapters?.length ?? 0) - 1 ? _nextChapter : null,
+      onPrevious: (_currentGroupIndex > 0 || _currentSubPageIndex > 0) ? _previousPage : null,
+      onNext: (_currentGroupIndex < totalGroupCount - 1 ||
+               _currentSubPageIndex < (groups?[_currentGroupIndex].totalPages ?? 1) - 1)
+          ? _nextPage
+          : null,
     );
   }
 
-  /// 获取章节的 XHTML 文件名
-  String _getXhtmlFileName(EpubChapter chapter) {
-    // 尝试从章节对象中获取文件路径信息
-    try {
-      // 方法1: 尝试访问 Anchor（通常是文件路径）
-      if (chapter.Anchor != null && chapter.Anchor!.isNotEmpty) {
-        final anchor = chapter.Anchor!;
-        // Anchor 格式可能是 "part0000.xhtml#chapter1" 或 "part0000.xhtml"
-        final fileName = anchor.split('#').first.split('/').last.split('\\').last;
-        if (fileName.isNotEmpty) {
-          return fileName;
-        }
-      }
-
-      // 方法2: 如果以上方法都失败，返回章节标题作为标识
-      final title = chapter.Title ?? '未知章节';
-      return title;
-    } catch (e) {
-      _logger.debug('无法获取 XHTML 文件名: $e');
-      return 'unknown';
-    }
-  }
-
-  /// 获取章节的详细信息（包括文件分割情况）
-  String _getChapterDetails(EpubChapter chapter) {
-    final xhtmlFile = _getXhtmlFileName(chapter);
-    final contentLength = chapter.HtmlContent?.length ?? 0;
-
-    // 检查是否有 split 标记（表示是被分割的文件）
-    final isSplit = xhtmlFile.contains('_split_') || xhtmlFile.contains('_part_');
-
-    if (isSplit) {
-      return '$xhtmlFile (${contentLength} chars, split)';
-    } else {
-      return '$xhtmlFile (${contentLength} chars)';
-    }
-  }
 }

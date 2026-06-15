@@ -1,0 +1,20 @@
+fix(reader): group chapter navigation — treat sub-chapters as pages within their parent chapter
+
+Bug 1: 向下滑动/翻子页面时，章节数不应一起增加
+Bug 2: 有子页面的章节，向右翻页实应进入组内子页面而非跳到下一章
+
+Root cause: `_flatChapters` flattened parent+child chapters into a single list,
+and `_currentChapterIndex` indexed into it directly. Every entry was treated as
+a separate "chapter", so navigating to a sub-chapter incremented the chapter
+index.
+
+Fix:
+- Introduce `_ChapterGroup` — one top-level chapter + its sub-children form a group.
+- Track `_currentGroupIndex` (which group/top-level chapter) and
+  `_currentSubPageIndex` (which page within the group).
+- Navigation: advance through sub-pages within the group first; only cross
+  groups when the entire group is exhausted.
+- Preserve backward compatibility: saved flat `chapterIndex` is restored via
+  `_restorePositionFromFlatIndex()`.
+
+Co-Authored-By: AtomCode (deepseek-v4-flash) <noreply@atomgit.com>
