@@ -123,7 +123,7 @@ class ReaderContentState extends State<ReaderContent> {
     widget.onTotalPagesChanged?.call(_totalPages);
 
     if (!_restoringScroll) {
-      _currentPage = (_scrollController.offset / _pageSize).round().clamp(0, _totalPages - 1) as int;
+      _currentPage = (_scrollController.offset / _pageSize).round().clamp(0, _totalPages - 1);
     }
     _ready = true;
   }
@@ -149,8 +149,7 @@ class ReaderContentState extends State<ReaderContent> {
 
     final nextOffset = (_currentPage + 1) * _pageSize;
     if (nextOffset >= _scrollController.position.maxScrollExtent) {
-      widget.onReachedChapterEnd?.call();
-      return false; // 已到章节末尾
+      return false; // 已到章节末尾，由调用方处理跨章
     }
 
     _scrollController.animateTo(
@@ -167,8 +166,7 @@ class ReaderContentState extends State<ReaderContent> {
 
     final prevOffset = (_currentPage - 1) * _pageSize;
     if (prevOffset < 0) {
-      widget.onReachedChapterStart?.call();
-      return false; // 已到章节开头
+      return false; // 已到章节开头，由调用方处理跨章
     }
 
     _scrollController.animateTo(
